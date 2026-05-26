@@ -489,6 +489,19 @@ hooks:
         XCTAssertTrue(script.contains(#""file://" + str(plugin_path)"#))
     }
 
+    func testRemoteInstallerConfigureScriptInstallsHermes() {
+        // #176: Hermes (a Claude Code fork) must be configured on remote hosts too.
+        let host = RemoteHost(id: "host-1", name: "devbox", host: "example.com")
+
+        let script = RemoteInstaller.configureRemoteHooksScript(host: host)
+
+        XCTAssertTrue(script.contains("def install_hermes():"))
+        XCTAssertTrue(script.contains(#"home / ".hermes""#))
+        XCTAssertTrue(script.contains(#"command_for("hermes")"#))
+        XCTAssertTrue(script.contains(#""Hermes ok""#))
+        XCTAssertTrue(script.contains("install_hermes()"))
+    }
+
     func testRemoteOpencodePluginCarriesRemoteHostIdentity() throws {
         let host = RemoteHost(id: #"host-"quoted""#, name: "devbox\nwest", host: "example.com")
         let source = """

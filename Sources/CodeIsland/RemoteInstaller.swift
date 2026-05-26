@@ -527,6 +527,36 @@ def install_claude():
     write_json(settings_path, data)
     return "Claude ok"
 
+def install_hermes():
+    # Hermes is a Claude Code fork: same settings.json + hooks layout.
+    hermes_root = home / ".hermes"
+    if not hermes_root.exists() and shutil.which("hermes") is None:
+        return "Hermes skipped"
+
+    settings_path = hermes_root / "settings.json"
+    data = ensure_json(settings_path)
+    hooks = data.get("hooks") or {}
+    remove_our_hooks(hooks)
+
+    cmd = command_for("hermes")
+    without_matcher = [{"hooks": [{"type": "command", "command": cmd, "timeout": 60}]}]
+    with_matcher = [{"matcher": "*", "hooks": [{"type": "command", "command": cmd, "timeout": 60}]}]
+    with_long_timeout = [{"matcher": "*", "hooks": [{"type": "command", "command": cmd, "timeout": 86400}]}]
+    precompact = [
+        {"matcher": "auto", "hooks": [{"type": "command", "command": cmd, "timeout": 60}]},
+        {"matcher": "manual", "hooks": [{"type": "command", "command": cmd, "timeout": 60}]},
+    ]
+    hooks["UserPromptSubmit"] = without_matcher
+    hooks["PermissionRequest"] = with_long_timeout
+    hooks["Notification"] = with_matcher
+    hooks["Stop"] = without_matcher
+    hooks["SessionStart"] = without_matcher
+    hooks["SessionEnd"] = without_matcher
+    hooks["PreCompact"] = precompact
+    data["hooks"] = hooks
+    write_json(settings_path, data)
+    return "Hermes ok"
+
 def ensure_toml_codex_hooks(path):
     content = path.read_text() if path.exists() else ""
     current_hooks_pattern = r"(?m)^\\s*hooks\\s*=\\s*(true|false)\\s*(#.*)?$"
@@ -665,7 +695,7 @@ def install_opencode():
                 write_opencode_config(legacy_path, legacy)
     return "OpenCode ok"
 
-parts = [install_claude(), install_codex(), install_codebuddy(), install_traecli(), install_opencode()]
+parts = [install_claude(), install_hermes(), install_codex(), install_codebuddy(), install_traecli(), install_opencode()]
 print(" · ".join(parts))
 """
     }
