@@ -203,6 +203,80 @@ final class AppStateToolUseCacheTests: XCTestCase {
         XCTAssertEqual(try behavior(keptResponse), "allow")
     }
 
+    // MARK: - issue #216: orphan permissions (no tool_use_id) auto-dismiss on terminal approval
+
+    /// Repro for #216: a PermissionRequest carrying NO tool_use_id can never be
+    /// correlated by resolveToolUseIfCompleted, so approving in the terminal left
+    /// the card up until the user closed it manually. After the fix, a follow-up
+    /// same-session activity event resolves the orphan as approved-in-terminal.
+    func testOrphanPermissionResolvedByFollowUpActivity() async throws {
+        let appState = AppState()
+        let orphan = try makeHookEvent(
+            name: "PermissionRequest",
+            sessionId: "s1",
+            toolName: "Bash",
+            toolUseId: nil,
+            toolInput: ["command": "echo hi"]
+        )
+
+        let responseTask = Task<Data, Never> {
+            await withCheckedContinuation { cont in
+                appState.handlePermissionRequest(orphan, continuation: cont)
+            }
+        }
+        await Task.yield()
+        XCTAssertEqual(appState.permissionQueue.count, 1)
+        XCTAssertNil(appState.permissionQueue.first?.toolUseId)
+
+        // Agent moved on (user approved in terminal) — a follow-up PostToolUse
+        // arrives for the same session with no correlatable tool_use_id.
+        appState.handleEvent(try makeHookEvent(
+            name: "PostToolUse",
+            sessionId: "s1",
+            toolName: "Bash",
+            toolUseId: nil
+        ))
+
+        let response = await responseTask.value
+        XCTAssertEqual(try behavior(response), "allow")
+        XCTAssertEqual(appState.permissionQueue.count, 0)
+    }
+
+    /// Guard for #147 inside the #216 fix: an orphan-drain triggered by a follow-up
+    /// activity event must NOT touch permission requests that carry a tool_use_id —
+    /// those still wait for proper correlation so parallel tool calls don't deny
+    /// each other.
+    func testOrphanDrainDoesNotResolvePermissionWithToolUseId() async throws {
+        let appState = AppState()
+        let correlated = try makePermissionEvent(sessionId: "s1", toolName: "Bash", toolUseId: "toolu_keep")
+
+        let responseTask = Task<Data, Never> {
+            await withCheckedContinuation { cont in
+                appState.handlePermissionRequest(correlated, continuation: cont)
+            }
+        }
+        await Task.yield()
+        XCTAssertEqual(appState.permissionQueue.count, 1)
+
+        // Unrelated follow-up activity (different/absent tool_use_id) for the same
+        // session. The correlated request keeps waiting.
+        appState.handleEvent(try makeHookEvent(
+            name: "PostToolUse",
+            sessionId: "s1",
+            toolName: "Bash",
+            toolUseId: "toolu_other"
+        ))
+
+        XCTAssertEqual(appState.permissionQueue.count, 1,
+            "Permission with a tool_use_id must not be drained by an unrelated follow-up (#147)")
+        XCTAssertEqual(appState.permissionQueue.first?.toolUseId, "toolu_keep")
+        await assertTaskNotResolved(responseTask)
+
+        appState.approvePermission()
+        let response = await responseTask.value
+        XCTAssertEqual(try behavior(response), "allow")
+    }
+
     // MARK: - issue #147 regression: parallel/plugin tool calls must not deny pending permissions
 
     /// Repro for #147: a Stop (or any non-keepWaiting activity event) arriving

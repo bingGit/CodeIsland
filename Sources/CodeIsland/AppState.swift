@@ -929,6 +929,10 @@ final class AppState {
         // correlated, and drain queue entries whose agent already moved on.
         cachePreToolUseIfApplicable(event)
         resolveToolUseIfCompleted(event)
+        // #216: permission requests with no correlatable tool_use_id can't be drained by
+        // resolveToolUseIfCompleted. A follow-up activity event means the user already
+        // approved in the terminal — resume those (and only those) as approved.
+        resolveOrphanPermissionsOnActivity(event)
 
         let effects = reduceEvent(sessions: &sessions, event: event, maxHistory: maxHistory)
 
