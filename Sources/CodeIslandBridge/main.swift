@@ -258,7 +258,18 @@ if json["session_id"] == nil {
     } else if let data = json["data"] as? [String: Any],
               let sessionId = nonEmptyString(data["session_id"]) ?? nonEmptyString(data["sessionId"]) {
         json["session_id"] = sessionId
+    } else if let conversationId = nonEmptyString(json["conversationId"]) {
+        // Google Antigravity (Gemini-based) stdin carries no session_id; it uses
+        // `conversationId` as the stable per-conversation key (#215).
+        json["session_id"] = conversationId
     }
+}
+
+// Google Antigravity sends the transcript path as camelCase `transcriptPath`;
+// the rest of CodeIsland reads snake_case `transcript_path` (used by the JSONL
+// tailer + cwd inference). Bridge the alias when only the camelCase form exists.
+if json["transcript_path"] == nil, let tp = nonEmptyString(json["transcriptPath"]) {
+    json["transcript_path"] = tp
 }
 
 // Copilot CLI adaptation: its stdin JSON lacks session_id and hook_event_name.

@@ -400,6 +400,11 @@ final class AppState {
         case "codex":      return path.contains("/codex.app/contents/")
         case "opencode":   return path.contains("/opencode.app/contents/")
         case "antigravity": return path.contains("/antigravity.app/contents/")
+        // Google Antigravity IDE — host app is Antigravity.app. Same .app path as
+        // the fork, but the check is per-source so a "google-antigravity" session
+        // (whose host genuinely IS Antigravity.app) never collides with the fork's
+        // "antigravity" CLI sessions (#215).
+        case "google-antigravity": return path.contains("/antigravity.app/contents/")
         case "workbuddy":   return path.contains("/workbuddy.app/contents/")
         case "hermes":      return path.contains("/hermes.app/contents/")
         default:           return false
@@ -711,6 +716,7 @@ final class AppState {
         case "stepfun":    return findStepFunPids(candidatePids: candidatePids)
         case "opencode":   return findOpenCodePids(candidatePids: candidatePids)
         case "antigravity": return findAntiGravityPids(candidatePids: candidatePids)
+        case "google-antigravity": return findGoogleAntigravityPids(candidatePids: candidatePids)
         case "workbuddy":  return findWorkBuddyPids(candidatePids: candidatePids)
         case "hermes":     return findHermesPids(candidatePids: candidatePids)
         case "qwen":       return findQwenPids(candidatePids: candidatePids)
@@ -2934,6 +2940,27 @@ final class AppState {
             ],
             argSubstrings: [
                 "/.antigravity/antigravity/bin/antigravity",
+            ],
+            candidatePids: candidatePids
+        )
+    }
+
+    /// Google Antigravity (Gemini-based IDE/CLI, #215). The actionable agent is the
+    /// `agy` CLI (pypi google-antigravity) launched from the IDE's integrated
+    /// terminal; the IDE itself is Antigravity.app (com.google.antigravity).
+    /// We match the IDE app *only* via the Google-specific .app path component to
+    /// avoid colliding with the existing "antigravity" Claude-fork CLI (which lives
+    /// under ~/.antigravity, never in an .app named exactly "antigravity").
+    private nonisolated static func findGoogleAntigravityPids(candidatePids: [pid_t]? = nil) -> [pid_t] {
+        findPids(
+            matchingPathSubstrings: [
+                "/antigravity.app/contents/macos/",
+                "/bin/agy",
+            ],
+            argSubstrings: [
+                "/google-antigravity/",
+                "/antigravity-cli/",
+                "/bin/agy",
             ],
             candidatePids: candidatePids
         )

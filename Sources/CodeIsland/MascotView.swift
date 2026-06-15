@@ -26,7 +26,8 @@ struct MascotView: View {
             switch source {
             case "codex":
                 DexView(status: status, size: size)
-            case "gemini":
+            case "gemini", "google-antigravity":
+                // Google Antigravity is Gemini-based — reuse the Gemini mascot.
                 GeminiView(status: status, size: size)
             case "cursor":
                 CursorView(status: status, size: size)

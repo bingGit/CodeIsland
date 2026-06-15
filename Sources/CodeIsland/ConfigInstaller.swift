@@ -41,6 +41,16 @@ enum HookFormat {
     /// where `hooks:` is a MAP of snake_case event names -> list of
     /// {matcher?, command, timeout?}. Diverged from Claude — not a fork (#226).
     case hermes
+    /// Google Antigravity (Gemini-based IDE/CLI) — a standalone
+    /// ~/.gemini/config/hooks.json wrapped in a NAMED-CONFIG object:
+    /// { "<name>": { "<Event>": [ {matcher?, hooks:[{type,command,timeout}]} ] } }.
+    /// Differs from `.nested` only by the outer name wrapper (the inner entry is
+    /// keyed directly under `root[configKey]` by `installExternalHooks`, so the
+    /// configKey IS the wrapper name "codeisland"). Each command carries
+    /// `--event <Event>` because Antigravity stdin lacks hook_event_name. Event
+    /// names are Claude-style PascalCase (PreToolUse/PostToolUse/Stop), and a
+    /// `matcher` is emitted only for the two tool events (#215).
+    case antigravityNamed
 
     var storageValue: String {
         switch self {
@@ -54,6 +64,7 @@ enum HookFormat {
         case .none: return "none"
         case .cline: return "cline"
         case .hermes: return "hermes"
+        case .antigravityNamed: return "antigravityNamed"
         }
     }
 
@@ -69,6 +80,7 @@ enum HookFormat {
         case "none": self = .none
         case "cline": self = .cline
         case "hermes": self = .hermes
+        case "antigravitynamed": self = .antigravityNamed
         default: return nil
         }
     }
@@ -302,6 +314,18 @@ struct ConfigInstaller {
             format: .claude,
             events: defaultEvents(for: .claude)
         ),
+        // Google Antigravity (Gemini-based IDE/CLI) — NOT the Claude-fork above.
+        // Reads a STANDALONE ~/.gemini/config/hooks.json (NOT Gemini-CLI's
+        // settings.json "hooks" key) wrapped in a named-config object keyed by
+        // "codeisland". Event names are Claude-style PascalCase; stdin carries no
+        // hook_event_name, so each command needs --event <Event> (#215).
+        CLIConfig(
+            name: "Google Antigravity", source: "google-antigravity",
+            configPath: ".gemini/config/hooks.json", configKey: "codeisland",
+            format: .antigravityNamed,
+            events: defaultEvents(for: .antigravityNamed),
+            rootOverride: { NSHomeDirectory() }
+        ),
         // WorkBuddy — Claude Code fork
         CLIConfig(
             name: "WorkBuddy", source: "workbuddy",
@@ -518,6 +542,16 @@ struct ConfigInstaller {
             return []
         case .none:
             return []
+        case .antigravityNamed:
+            // Antigravity hooks.json uses Claude-style PascalCase event names.
+            // We install the three actionable events for status/permission.
+            // PreInvocation/PostInvocation are pass-through with no internal
+            // meaning, so they're omitted. Timeout is in SECONDS (docs default 30).
+            return [
+                ("PreToolUse", 5, false),
+                ("PostToolUse", 5, false),
+                ("Stop", 5, false),
+            ]
         }
     }
 
@@ -751,6 +785,13 @@ struct ConfigInstaller {
             let fm = FileManager.default
             return fm.fileExists(atPath: NSHomeDirectory() + "/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev")
                 || fm.fileExists(atPath: NSHomeDirectory() + "/Documents/Cline")
+        }
+        if source == "google-antigravity" {
+            // Detect via Antigravity-specific markers, NOT bare ~/.gemini (which the
+            // plain Gemini CLI also creates). See installExternalHooks gating (#215).
+            let fm = FileManager.default
+            return fm.fileExists(atPath: NSHomeDirectory() + "/.gemini/config")
+                || fm.fileExists(atPath: NSHomeDirectory() + "/.gemini/antigravity-cli")
         }
         guard let cli = allCLIs.first(where: { $0.source == source }) else { return false }
         return FileManager.default.fileExists(atPath: cli.dirPath)
@@ -1142,6 +1183,22 @@ struct ConfigInstaller {
             if !fm.fileExists(atPath: cli.dirPath) {
                 try? fm.createDirectory(atPath: cli.dirPath, withIntermediateDirectories: true)
             }
+        } else if cli.format == .antigravityNamed {
+            // Google Antigravity shares the ~/.gemini root with the plain Gemini
+            // CLI, so we must NOT install just because ~/.gemini exists — that
+            // would write a stray hooks.json into a Gemini-only user's home.
+            // Gate on an Antigravity-specific marker: the shared ~/.gemini/config
+            // dir (where agy-cli writes per CHANGELOG v1.0.8) or the legacy
+            // ~/.gemini/antigravity-cli dir.
+            let geminiRoot = NSHomeDirectory() + "/.gemini"
+            let configDir = cli.dirPath                       // ~/.gemini/config
+            let antigravityDir = geminiRoot + "/antigravity-cli"
+            let hasAntigravityPresence =
+                fm.fileExists(atPath: configDir) || fm.fileExists(atPath: antigravityDir)
+            guard hasAntigravityPresence else { return true }
+            if !fm.fileExists(atPath: configDir) {
+                try? fm.createDirectory(atPath: configDir, withIntermediateDirectories: true)
+            }
         } else {
             guard fm.fileExists(atPath: cli.dirPath) else { return true } // CLI not installed, skip OK
         }
@@ -1192,6 +1249,20 @@ struct ConfigInstaller {
                 // Kiro entries: { command, matcher: "*", timeout_ms }. Caller declares
                 // timeout in seconds for consistency with other CLIs; convert to ms here.
                 entry = ["command": baseCommand, "matcher": "*", "timeout_ms": timeout * 1000]
+            case .antigravityNamed:
+                // Antigravity named-config entry. The outer wrapper name is the
+                // configKey ("codeisland"), keyed here by installExternalHooks, so we
+                // emit only the inner {matcher?, hooks:[{type,command,timeout}]} value.
+                // stdin lacks hook_event_name -> the command must carry --event.
+                // `matcher` is meaningful ONLY for PreToolUse/PostToolUse (regex over
+                // the tool name, "*" = all); it's ignored for Stop, so we omit it there.
+                let agyCommand = "\(baseCommand) --event \(event)"
+                let hookList: [[String: Any]] = [["type": "command", "command": agyCommand, "timeout": timeout]]
+                if event == "PreToolUse" || event == "PostToolUse" {
+                    entry = ["matcher": "*", "hooks": hookList]
+                } else {
+                    entry = ["hooks": hookList]
+                }
             case .cline, .none:
                 // Handled at the top of installExternalHooks; never reaches here
                 return false

@@ -27,6 +27,7 @@ public struct SessionSnapshot: Sendable {
         "stepfun",
         "opencode",
         "antigravity",
+        "google-antigravity",
         "workbuddy",
         "hermes",
         "qwen",
@@ -64,6 +65,7 @@ public struct SessionSnapshot: Sendable {
         "codybuddycn",
         "stepfun",
         "antigravity",
+        "google-antigravity",
     ]
 
     public var status: AgentStatus = .idle
@@ -131,6 +133,17 @@ public struct SessionSnapshot: Sendable {
             "ag": "antigravity",
             "anti-gravity": "antigravity",
             "anti gravity": "antigravity",
+            // Google Antigravity (Gemini-based IDE/CLI). A SEPARATE product from
+            // the "antigravity" Claude-Code fork above — it reads
+            // ~/.gemini/config/hooks.json, not .antigravity/settings.json. Keep
+            // the "ag"/"anti-gravity" aliases pointed at the fork; only these
+            // explicit google-prefixed / -ide variants resolve here (#215).
+            "googleantigravity": "google-antigravity",
+            "google antigravity": "google-antigravity",
+            "google-anti-gravity": "google-antigravity",
+            "antigravity-ide": "google-antigravity",
+            "antigravity-cli": "google-antigravity",
+            "agy": "google-antigravity",
             "work-buddy": "workbuddy",
             "work body": "workbuddy",
             "work-body": "workbuddy",
@@ -165,6 +178,10 @@ public struct SessionSnapshot: Sendable {
         let dynamicSupportedSources = supportedSources.union(loadCustomSources())
 
         if dynamicSupportedSources.contains(canonical) { return canonical }
+        // Match Google Antigravity variants BEFORE the bare "antigravity" prefix
+        // clause below, so a "google-antigravity-*" sub-brand never falls through
+        // to the Claude-fork source.
+        if canonical.hasPrefix("google-antigravity") || canonical.hasPrefix("googleantigravity") { return "google-antigravity" }
         if canonical.hasPrefix("antigravity") { return "antigravity" }
         if canonical.hasPrefix("workbuddy") { return "workbuddy" }
         if canonical.hasPrefix("hermes") { return "hermes" }
@@ -321,6 +338,7 @@ public struct SessionSnapshot: Sendable {
         case "stepfun": return "StepFun"
         case "opencode": return "OpenCode"
         case "antigravity": return "AntiGravity"
+        case "google-antigravity": return "Google Antigravity"
         case "workbuddy": return "WorkBuddy"
         case "hermes": return "Hermes"
         case "qwen": return "Qwen Code"
@@ -378,6 +396,7 @@ public struct SessionSnapshot: Sendable {
         "com.stepfun.app": "StepFun",
         "com.openai.codex": "Codex",
         "ai.opencode.desktop": "OpenCode",
+        "com.google.antigravity": "Antigravity",
     ]
 
     /// Maps native app bundle IDs to their expected source identifier.
@@ -392,6 +411,9 @@ public struct SessionSnapshot: Sendable {
         "com.stepfun.app": "stepfun",
         "com.openai.codex": "codex",
         "ai.opencode.desktop": "opencode",
+        // Google Antigravity IDE — its integrated terminal launches the agy CLI,
+        // whose hooks report --source google-antigravity (#215).
+        "com.google.antigravity": "google-antigravity",
     ]
 
     /// Short terminal/app name for display tag
