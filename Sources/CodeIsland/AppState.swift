@@ -2487,6 +2487,8 @@ final class AppState {
                 child.tmuxClientTty = child.tmuxClientTty ?? parent.session.tmuxClientTty
                 child.tmuxEnv = child.tmuxEnv ?? parent.session.tmuxEnv
                 child.termBundleId = child.termBundleId ?? parent.session.termBundleId
+                child.remoteHostId = child.remoteHostId ?? parent.session.remoteHostId
+                child.remoteHostName = child.remoteHostName ?? parent.session.remoteHostName
                 child.cliPid = child.cliPid ?? parent.session.cliPid
                 child.cliStartTime = child.cliStartTime ?? parent.session.cliStartTime
                 child.status = subagent.status
