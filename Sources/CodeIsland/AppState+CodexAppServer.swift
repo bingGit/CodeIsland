@@ -66,8 +66,7 @@ extension AppState {
 
     private func startCodexAppServerClientIfPossible() {
         guard codexAppServerClient == nil else { return }
-        let executable = URL(fileURLWithPath: CodexAppServerClient.defaultExecutablePath)
-        guard FileManager.default.isExecutableFile(atPath: executable.path) else { return }
+        guard let executable = Self.codexAppServerExecutableURL() else { return }
 
         let client = CodexAppServerClient(executableURL: executable)
         client.onMessage = { [weak self] message in
@@ -89,6 +88,33 @@ extension AppState {
             return
         }
         codexAppServerClient = client
+    }
+
+    static func codexAppServerExecutableURL(
+        runningBundleURLs: [URL] = NSWorkspace.shared.runningApplications.compactMap { app in
+            app.bundleIdentifier == AppState.codexAppBundleId ? app.bundleURL : nil
+        },
+        fallbackPaths: [String] = [
+            CodexAppServerClient.defaultExecutablePath,
+            NSHomeDirectory() + "/Applications/Codex.app/Contents/Resources/codex"
+        ],
+        fileManager: FileManager = .default
+    ) -> URL? {
+        var candidates: [URL] = []
+        for bundleURL in runningBundleURLs {
+            candidates.append(bundleURL.appendingPathComponent("Contents/Resources/codex"))
+        }
+        candidates.append(contentsOf: fallbackPaths.map { URL(fileURLWithPath: $0) })
+
+        var seen = Set<String>()
+        for candidate in candidates {
+            let path = candidate.path
+            guard seen.insert(path).inserted else { continue }
+            if fileManager.isExecutableFile(atPath: path) {
+                return candidate
+            }
+        }
+        return nil
     }
 
     private func stopCodexAppServerClient() {

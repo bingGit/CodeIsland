@@ -4,6 +4,45 @@ import XCTest
 
 @MainActor
 final class AppStateCodexAppServerTests: XCTestCase {
+    func testCodexAppServerExecutablePrefersRunningBundlePath() throws {
+        let fm = FileManager.default
+        let tempDir = fm.temporaryDirectory.appendingPathComponent("codeisland-codex-app-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: tempDir) }
+
+        let bundleURL = tempDir.appendingPathComponent("Nested/Codex.app", isDirectory: true)
+        let resourcesURL = bundleURL.appendingPathComponent("Contents/Resources", isDirectory: true)
+        try fm.createDirectory(at: resourcesURL, withIntermediateDirectories: true)
+        let bundledExecutable = resourcesURL.appendingPathComponent("codex")
+        try makeExecutable(at: bundledExecutable)
+
+        let fallbackExecutable = tempDir.appendingPathComponent("fallback-codex")
+        try makeExecutable(at: fallbackExecutable)
+
+        let resolved = AppState.codexAppServerExecutableURL(
+            runningBundleURLs: [bundleURL],
+            fallbackPaths: [fallbackExecutable.path],
+            fileManager: fm
+        )
+
+        XCTAssertEqual(resolved?.path, bundledExecutable.path)
+    }
+
+    func testCodexAppServerExecutableFallsBackWhenNoRunningBundlePathExists() throws {
+        let fm = FileManager.default
+        let tempDir = fm.temporaryDirectory.appendingPathComponent("codeisland-codex-app-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: tempDir) }
+
+        let fallbackExecutable = tempDir.appendingPathComponent("fallback-codex")
+        try makeExecutable(at: fallbackExecutable)
+
+        let resolved = AppState.codexAppServerExecutableURL(
+            runningBundleURLs: [],
+            fallbackPaths: [fallbackExecutable.path],
+            fileManager: fm
+        )
+
+        XCTAssertEqual(resolved?.path, fallbackExecutable.path)
+    }
 
     func testActiveWithApprovalFlagMapsToWaitingApproval() {
         var snapshot = SessionSnapshot()
@@ -107,5 +146,12 @@ final class AppStateCodexAppServerTests: XCTestCase {
         ])
 
         XCTAssertEqual(snapshot.status, .waitingApproval)
+    }
+
+    private func makeExecutable(at url: URL) throws {
+        let directory = url.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try "#!/bin/sh\n".write(to: url, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
     }
 }

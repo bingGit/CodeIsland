@@ -5,10 +5,12 @@ import CodeIslandCore
 @MainActor
 final class AppStatePermissionFlowTests: XCTestCase {
     private var savedCodexHome: String?
+    private var savedSmartSuppress: Any?
 
     override func setUp() {
         super.setUp()
         savedCodexHome = ProcessInfo.processInfo.environment["CODEX_HOME"]
+        savedSmartSuppress = UserDefaults.standard.object(forKey: SettingsKey.smartSuppress)
     }
 
     override func tearDown() {
@@ -17,7 +19,33 @@ final class AppStatePermissionFlowTests: XCTestCase {
         } else {
             unsetenv("CODEX_HOME")
         }
+        if let savedSmartSuppress {
+            UserDefaults.standard.set(savedSmartSuppress, forKey: SettingsKey.smartSuppress)
+        } else {
+            UserDefaults.standard.removeObject(forKey: SettingsKey.smartSuppress)
+        }
         super.tearDown()
+    }
+
+    func testSmartSuppressKeepsPendingSurfaceCollapsedWhenTerminalIsFrontmost() {
+        UserDefaults.standard.set(true, forKey: SettingsKey.smartSuppress)
+        let appState = AppState()
+        var session = SessionSnapshot()
+        session.termApp = "Ghostty"
+        appState.sessions["s-smart"] = session
+
+        XCTAssertFalse(appState.shouldAutoOpenPendingSurface(for: "s-smart") { _ in true })
+        XCTAssertTrue(appState.shouldAutoOpenPendingSurface(for: "s-smart") { _ in false })
+    }
+
+    func testPendingSurfaceAutoOpensWhenSmartSuppressIsOff() {
+        UserDefaults.standard.set(false, forKey: SettingsKey.smartSuppress)
+        let appState = AppState()
+        var session = SessionSnapshot()
+        session.termApp = "Ghostty"
+        appState.sessions["s-smart-off"] = session
+
+        XCTAssertTrue(appState.shouldAutoOpenPendingSurface(for: "s-smart-off") { _ in true })
     }
 
     func testDismissPermissionSkipsAlreadyDismissedSessions() async throws {
@@ -245,6 +273,36 @@ final class AppStatePermissionFlowTests: XCTestCase {
         let rules = try readCodeIslandRules(in: codexHome)
         XCTAssertTrue(rules.contains(#"pattern = ["php", "vendor/bin/phpstan", "analyse"]"#))
         XCTAssertTrue(rules.contains(#"decision = "allow""#))
+    }
+
+    func testCodexAlwaysAllowMCPToolPersistsApprovalModeWithoutUnsupportedUpdatedPermissions() async throws {
+        let codexHome = makeTemporaryCodexHome()
+        defer { try? FileManager.default.removeItem(at: codexHome) }
+
+        let appState = AppState()
+        let event = try makePermissionRequestEvent(
+            sessionId: "s-codex-mcp-always",
+            toolName: "mcp__sh_wiki__fetch_page",
+            toolInput: ["page_id": "432458668"],
+            source: "codex"
+        )
+
+        let responseTask = Task<Data, Never> {
+            await withCheckedContinuation { continuation in
+                appState.handlePermissionRequest(event, continuation: continuation)
+            }
+        }
+
+        await Task.yield()
+        appState.approvePermission(always: true)
+
+        let decision = try extractPermissionDecision(from: await responseTask.value)
+        XCTAssertEqual(decision["behavior"] as? String, "allow")
+        XCTAssertNil(decision["updatedPermissions"])
+
+        let config = try String(contentsOf: codexHome.appendingPathComponent("config.toml"), encoding: .utf8)
+        XCTAssertTrue(config.contains("[mcp_servers.sh_wiki.tools.fetch_page]"))
+        XCTAssertTrue(config.contains(#"approval_mode = "approve""#))
     }
 
     /// #224: "Always allow" for an MCP tool (`mcp__server__tool`) must emit a
