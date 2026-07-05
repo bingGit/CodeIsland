@@ -7,7 +7,6 @@ struct PiView: View {
     let status: AgentStatus
     var size: CGFloat = 27
     @State private var alive = false
-    @Environment(\.mascotSpeed) private var speed
 
     private static let shellC = Color(red: 0.14, green: 0.49, blue: 0.53)
     private static let shellDk = Color(red: 0.09, green: 0.30, blue: 0.34)
@@ -105,8 +104,7 @@ struct PiView: View {
 
     private var sleepScene: some View {
         ZStack {
-            TimelineView(.periodic(from: .now, by: 0.06)) { ctx in
-                let t = ctx.date.timeIntervalSinceReferenceDate * speed
+            MascotTimeline(interval: 0.06) { t in
                 let phase = t.truncatingRemainder(dividingBy: 4.0) / 4.0
                 let float = sin(phase * .pi * 2) * 0.7
                 let blinkCycle = t.truncatingRemainder(dividingBy: 4.0)
@@ -119,8 +117,7 @@ struct PiView: View {
                     drawPiFace(c, v: v, dy: float, eyeScale: blink)
                 }
             }
-            TimelineView(.periodic(from: .now, by: 0.05)) { ctx in
-                let t = ctx.date.timeIntervalSinceReferenceDate * speed
+            MascotTimeline(interval: 0.05) { t in
                 ZStack {
                     ForEach(0..<3, id: \.self) { i in
                         let ci = Double(i)
@@ -140,8 +137,7 @@ struct PiView: View {
     }
 
     private var workScene: some View {
-        TimelineView(.periodic(from: .now, by: 0.03)) { ctx in
-            let t = ctx.date.timeIntervalSinceReferenceDate * speed
+        MascotTimeline(interval: 0.03) { t in
             let bounce = sin(t * 2 * .pi / 0.42) * 0.9
             let blinkCycle = t.truncatingRemainder(dividingBy: 2.4)
             let blink: CGFloat = (blinkCycle > 2.1 && blinkCycle < 2.25) ? 0.1 : 1.0
@@ -171,8 +167,7 @@ struct PiView: View {
                 .frame(width: size * 0.8)
                 .blur(radius: size * 0.05)
                 .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: alive)
-            TimelineView(.periodic(from: .now, by: 0.03)) { ctx in
-                let t = ctx.date.timeIntervalSinceReferenceDate * speed
+            MascotTimeline(interval: 0.03) { t in
                 let pct = t.truncatingRemainder(dividingBy: 3.5) / 3.5
                 let jumpY = lerp([(0,0),(0.03,0),(0.18,-7.5),(0.26,1.3),(0.34,-5.5),(0.42,0.8),(0.5,-2.5),(0.58,0.2),(0.68,0),(1,0)], at: pct)
                 let shakeX: CGFloat = (pct > 0.16 && pct < 0.56) ? sin(pct * 80) * 0.55 : 0

@@ -6,7 +6,6 @@ struct StepFunView: View {
     let status: MascotAgentStatus
     var size: CGFloat = 27
     @State private var alive = false
-    @Environment(\.mascotSpeed) private var speed
 
     private static let bodyC   = Color(red: 0.180, green: 0.750, blue: 0.700) // #2EBFB3 bright teal
     private static let bodyDk  = Color(red: 0.120, green: 0.600, blue: 0.560)
@@ -95,8 +94,7 @@ struct StepFunView: View {
 
     private var sleepScene: some View {
         ZStack {
-            TimelineView(.periodic(from: .now, by: 0.06)) { ctx in
-                let t = ctx.date.timeIntervalSinceReferenceDate * speed
+            MascotTimeline(interval: 0.06) { t in
                 let phase = t.truncatingRemainder(dividingBy: 4.0) / 4.0
                 let float = sin(phase * .pi * 2) * 0.8
                 let blinkCycle = t.truncatingRemainder(dividingBy: 4.0)
@@ -109,8 +107,7 @@ struct StepFunView: View {
                     drawFace(c, v: v, dy: float, blinkPhase: blink)
                 }
             }
-            TimelineView(.periodic(from: .now, by: 0.05)) { ctx in
-                let t = ctx.date.timeIntervalSinceReferenceDate * speed
+            MascotTimeline(interval: 0.05) { t in
                 ZStack {
                     ForEach(0..<3, id: \.self) { i in
                         let ci = Double(i)
@@ -131,8 +128,7 @@ struct StepFunView: View {
     }
 
     private var workScene: some View {
-        TimelineView(.periodic(from: .now, by: 0.03)) { ctx in
-            let t = ctx.date.timeIntervalSinceReferenceDate * speed
+        MascotTimeline(interval: 0.03) { t in
             let bounce = sin(t * 2 * .pi / 0.4) * 1.0
             let blinkCycle = t.truncatingRemainder(dividingBy: 2.5)
             let blink: CGFloat = (blinkCycle > 2.2 && blinkCycle < 2.35) ? 0.1 : 1.0
@@ -163,8 +159,7 @@ struct StepFunView: View {
             Circle().fill(Self.alertC.opacity(alive ? 0.12 : 0)).frame(width: size * 0.8)
                 .blur(radius: size * 0.05)
                 .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: alive)
-            TimelineView(.periodic(from: .now, by: 0.03)) { ctx in
-                let t = ctx.date.timeIntervalSinceReferenceDate * speed
+            MascotTimeline(interval: 0.03) { t in
                 let cycle = t.truncatingRemainder(dividingBy: 3.5)
                 let pct = cycle / 3.5
                 let jumpY = lerp([(0,0),(0.03,0),(0.175,-8),(0.25,1.5),(0.275,-6),(0.35,1),(0.375,-4),(0.45,0.8),(0.475,-2),(0.55,0.3),(0.62,0),(1,0)], at: pct)

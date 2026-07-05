@@ -6,7 +6,6 @@ struct QwenView: View {
     let status: MascotAgentStatus
     var size: CGFloat = 27
     @State private var alive = false
-    @Environment(\.mascotSpeed) private var speed
 
     // Qwen brand palette — purple/violet
     private static let bodyC   = Color(red: 0.486, green: 0.228, blue: 0.929) // #7C3AED violet
@@ -124,11 +123,11 @@ struct QwenView: View {
     // ━━━━━━ SLEEP ━━━━━━
     private var sleepScene: some View {
         ZStack {
-            TimelineView(.periodic(from: .now, by: 0.06)) { ctx in
-                sleepCanvas(t: ctx.date.timeIntervalSinceReferenceDate * speed)
+            MascotTimeline(interval: 0.06) { t in
+                sleepCanvas(t: t)
             }
-            TimelineView(.periodic(from: .now, by: 0.05)) { ctx in
-                floatingZs(t: ctx.date.timeIntervalSinceReferenceDate * speed)
+            MascotTimeline(interval: 0.05) { t in
+                floatingZs(t: t)
             }
         }
     }
@@ -173,8 +172,8 @@ struct QwenView: View {
 
     // ━━━━━━ WORK ━━━━━━
     private var workScene: some View {
-        TimelineView(.periodic(from: .now, by: 0.03)) { ctx in
-            workCanvas(t: ctx.date.timeIntervalSinceReferenceDate * speed)
+        MascotTimeline(interval: 0.03) { t in
+            workCanvas(t: t)
         }
     }
 
@@ -223,8 +222,8 @@ struct QwenView: View {
                 .blur(radius: size * 0.05)
                 .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: alive)
 
-            TimelineView(.periodic(from: .now, by: 0.03)) { ctx in
-                alertCanvas(t: ctx.date.timeIntervalSinceReferenceDate * speed)
+            MascotTimeline(interval: 0.03) { t in
+                alertCanvas(t: t)
             }
         }
     }

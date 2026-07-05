@@ -7,7 +7,6 @@ struct CopilotView: View {
     let status: MascotAgentStatus
     var size: CGFloat = 27
     @State private var alive = false
-    @Environment(\.mascotSpeed) private var speed
 
     // Palette from copilot-avatar.svg
     private static let earC    = Color(red: 0.20, green: 0.20, blue: 0.20)  // #333 ear loops
@@ -128,12 +127,10 @@ struct CopilotView: View {
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     private var sleepScene: some View {
         ZStack {
-            TimelineView(.periodic(from: .now, by: 0.06)) { ctx in
-                let t = ctx.date.timeIntervalSinceReferenceDate * speed
+            MascotTimeline(interval: 0.06) { t in
                 sleepCanvas(t: t)
             }
-            TimelineView(.periodic(from: .now, by: 0.05)) { ctx in
-                let t = ctx.date.timeIntervalSinceReferenceDate * speed
+            MascotTimeline(interval: 0.05) { t in
                 floatingZs(t: t)
             }
         }
@@ -178,8 +175,7 @@ struct CopilotView: View {
     // WORK — bouncing, blinking, ear signals, keyboard
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     private var workScene: some View {
-        TimelineView(.periodic(from: .now, by: 0.03)) { timeline in
-            let t = timeline.date.timeIntervalSinceReferenceDate * speed
+        MascotTimeline(interval: 0.03) { t in
             workCanvas(t: t)
         }
     }
@@ -239,8 +235,8 @@ struct CopilotView: View {
                 .blur(radius: size * 0.05)
                 .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: alive)
 
-            TimelineView(.periodic(from: .now, by: 0.03)) { ctx in
-                alertCanvas(t: ctx.date.timeIntervalSinceReferenceDate * speed)
+            MascotTimeline(interval: 0.03) { t in
+                alertCanvas(t: t)
             }
         }
     }
