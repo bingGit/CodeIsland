@@ -165,10 +165,14 @@ struct DexView: View {
     }
 
     private func sleepCanvas(t: Double) -> some View {
-        let phase = t.truncatingRemainder(dividingBy: 4.0) / 4.0
-        let float = sin(phase * .pi * 2) * 0.8  // gentle float
+        // Cloud drift: two incommensurate sines — the float never quite repeats,
+        // which is exactly how a cloud should behave (#15).
+        let float = sin(t * 2 * .pi / 4.0) * 0.7 + sin(t * 2 * .pi / 6.3) * 0.35
+        // Standby heartbeat: mostly a slow blink, but every ~8s the cursor gives
+        // a quick double-pulse — a terminal dreaming in its sleep.
+        let pulse = MascotMotion.quirk(t, cycle: 8.0, duration: 0.5, seed: 0xDE1)
         let cursorPhase = t.truncatingRemainder(dividingBy: 1.2)
-        let cursorOn = cursorPhase < 0.6  // slow blink
+        let cursorOn = pulse > 0 ? (pulse * 4).truncatingRemainder(dividingBy: 1) < 0.5 : cursorPhase < 0.6
 
         return Canvas { c, sz in
             let v = V(sz, svgW: 15, svgH: 12, svgY0: 4)
@@ -179,7 +183,7 @@ struct DexView: View {
             // Sleep: only show dim cursor (no `>` chevron = mouth closed)
             if cursorOn {
                 c.fill(Path(v.r(6, 12, 3, 1, dy: float)),
-                       with: .color(Self.promptC.opacity(0.3)))
+                       with: .color(Self.promptC.opacity(pulse > 0 ? 0.5 : 0.3)))
             }
         }
     }
@@ -194,14 +198,19 @@ struct DexView: View {
     }
 
     private func workCanvas(t: Double) -> some View {
-        let bounce = sin(t * 2 * .pi / 0.4) * 1.0
+        // Compile-wait pause: every ~12s the terminal stops hammering keys for
+        // a moment (cursor steady, bounce settles) — output is "scrolling" (#15).
+        let pause = MascotMotion.quirk(t, cycle: 12.0, duration: 1.2, seed: 0xDE2)
+        let intensity = 1.0 - Double(pause)
+        let bounce = sin(t * 2 * .pi / 0.4) * 1.0 * intensity
 
-        // Cursor rapid blink
+        // Cursor rapid blink while typing; solid during the pause (busy, not idle).
         let cursorPhase = t.truncatingRemainder(dividingBy: 0.3)
-        let cursorOn = cursorPhase < 0.15
+        let cursorOn = pause > 0.3 ? true : cursorPhase < 0.15
 
-        // Key flash
-        let keyPhase = Int(t / 0.1) % 6
+        // Key flash with humanized stroke cadence — skipped strokes read as bursts.
+        let stroke = MascotMotion.typingStroke(t, cadence: 0.1, seed: 0xDE3)
+        let keyPhase = Int(MascotMotion.hash01(stroke.slot, seed: 0xDE4) * 6)
 
         return Canvas { c, sz in
             let v = V(sz, svgW: 16, svgH: 14, svgY0: 3)
@@ -223,12 +232,14 @@ struct DexView: View {
                     c.fill(Path(v.r(kx, ky, 1.8, 0.7)), with: .color(Self.kbKey))
                 }
             }
-            // Key flash
-            let flashRow = keyPhase / 3
-            let flashCol = keyPhase % 6
-            let fkx = 0.5 + CGFloat(flashCol) * 2.4
-            let fky = 13.5 + CGFloat(flashRow) * 1.2
-            c.fill(Path(v.r(fkx, fky, 1.8, 0.7)), with: .color(Self.kbHi.opacity(0.9)))
+            // Key flash — only on real strokes, and never during the pause
+            if stroke.active && pause < 0.3 {
+                let flashRow = keyPhase / 3
+                let flashCol = keyPhase % 6
+                let fkx = 0.5 + CGFloat(flashCol) * 2.4
+                let fky = 13.5 + CGFloat(flashRow) * 1.2
+                c.fill(Path(v.r(fkx, fky, 1.8, 0.7)), with: .color(Self.kbHi.opacity(0.9)))
+            }
 
             drawCloud(c, v: v, dy: dy)
             drawPrompt(c, v: v, dy: dy, cursorOn: cursorOn)

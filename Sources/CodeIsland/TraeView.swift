@@ -147,8 +147,9 @@ struct TraeView: View {
     }
 
     private func sleepCanvas(t: Double) -> some View {
-        let phase = t.truncatingRemainder(dividingBy: 4.0) / 4.0
-        let float = sin(phase * .pi * 2) * 0.8
+        // Two incommensurate drift periods — the float never quite repeats,
+        // and every mascot has its own rhythm so multi-session rows don't sync (#15).
+        let float = sin(t * 2 * .pi / 3.94) * 0.68 + sin(t * 2 * .pi / 6.29) * 0.36
         let blinkCycle = t.truncatingRemainder(dividingBy: 4.0)
         let blink: CGFloat = (blinkCycle > 3.5 && blinkCycle < 3.7) ? 0.15 : 0.5
 
@@ -169,9 +170,12 @@ struct TraeView: View {
     }
 
     private func workCanvas(t: Double) -> some View {
-        let bounce = sin(t * 2 * .pi / 0.4) * 1.0
-        let blinkCycle = t.truncatingRemainder(dividingBy: 2.5)
-        let blink: CGFloat = (blinkCycle > 2.2 && blinkCycle < 2.35) ? 0.1 : 1.0
+        // Work pause: every ~13s the bounce settles for a beat —
+        // reading output, not hammering keys nonstop (#15).
+        let workPause = MascotMotion.quirk(t, cycle: 12.9, duration: 1.2, seed: 0x9c7)
+        let bounce = sin(t * 2 * .pi / 0.4) * 1.0 * (1 - workPause)
+            + sin(t * 2 * .pi / 2.9) * 0.3 * workPause
+        let blink = max(0.1, MascotMotion.blink(t, seed: 0x9c8))
         let keyPhase = Int(t / 0.1) % 6
 
         return Canvas { c, sz in

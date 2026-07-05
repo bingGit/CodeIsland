@@ -95,8 +95,8 @@ struct StepFunView: View {
     private var sleepScene: some View {
         ZStack {
             MascotTimeline(interval: 0.12) { t in
-                let phase = t.truncatingRemainder(dividingBy: 4.0) / 4.0
-                let float = sin(phase * .pi * 2) * 0.8
+                // De-synced dual-sine drift — unique rhythm per mascot (#15).
+                let float = sin(t * 2 * .pi / 3.97) * 0.68 + sin(t * 2 * .pi / 6.32) * 0.36
                 let blinkCycle = t.truncatingRemainder(dividingBy: 4.0)
                 let blink: CGFloat = (blinkCycle > 3.5 && blinkCycle < 3.7) ? 0.15 : 0.5
                 Canvas { c, sz in
@@ -129,9 +129,10 @@ struct StepFunView: View {
 
     private var workScene: some View {
         MascotTimeline(interval: 0.03) { t in
-            let bounce = sin(t * 2 * .pi / 0.4) * 1.0
-            let blinkCycle = t.truncatingRemainder(dividingBy: 2.5)
-            let blink: CGFloat = (blinkCycle > 2.2 && blinkCycle < 2.35) ? 0.1 : 1.0
+            let workPause = MascotMotion.quirk(t, cycle: 12.6, duration: 1.2, seed: 0x100d)
+            let bounce = sin(t * 2 * .pi / 0.4) * 1.0 * (1 - workPause)
+                + sin(t * 2 * .pi / 2.9) * 0.3 * workPause
+            let blink = max(0.1, MascotMotion.blink(t, seed: 0x100e))
             let keyPhase = Int(t / 0.1) % 6
             Canvas { c, sz in
                 let v = V(sz, svgW: 16, svgH: 14, svgY0: 3)

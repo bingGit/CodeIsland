@@ -177,9 +177,12 @@ struct DroidView: View {
     }
 
     private func workCanvas(t: Double) -> some View {
-        let bounce = sin(t * 2 * .pi / 0.5) * 0.8  // slower, heavier bounce
-        let blinkCycle = t.truncatingRemainder(dividingBy: 2.0)
-        let blink: CGFloat = (blinkCycle > 1.7 && blinkCycle < 1.85) ? 0.1 : 1.0
+        // Work pause: every ~11s the bounce settles for a beat —
+        // reading output, not hammering keys nonstop (#15).
+        let workPause = MascotMotion.quirk(t, cycle: 10.6, duration: 1.2, seed: 0x296)
+        let bounce = sin(t * 2 * .pi / 0.5) * 0.8 * (1 - workPause)
+            + sin(t * 2 * .pi / 2.9) * 0.3 * workPause
+        let blink = max(0.1, MascotMotion.blink(t, seed: 0x297))
         let keyPhase = Int(t / 0.12) % 6  // slightly slower typing
 
         return Canvas { c, sz in

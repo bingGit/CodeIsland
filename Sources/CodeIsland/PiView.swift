@@ -105,8 +105,8 @@ struct PiView: View {
     private var sleepScene: some View {
         ZStack {
             MascotTimeline(interval: 0.12) { t in
-                let phase = t.truncatingRemainder(dividingBy: 4.0) / 4.0
-                let float = sin(phase * .pi * 2) * 0.7
+                // De-synced dual-sine drift — unique rhythm per mascot (#15).
+                let float = sin(t * 2 * .pi / 4.04) * 0.59 + sin(t * 2 * .pi / 6.87) * 0.32
                 let blinkCycle = t.truncatingRemainder(dividingBy: 4.0)
                 let blink: CGFloat = (blinkCycle > 3.5 && blinkCycle < 3.7) ? 0.15 : 1.0
                 Canvas { c, sz in
@@ -139,8 +139,7 @@ struct PiView: View {
     private var workScene: some View {
         MascotTimeline(interval: 0.03) { t in
             let bounce = sin(t * 2 * .pi / 0.42) * 0.9
-            let blinkCycle = t.truncatingRemainder(dividingBy: 2.4)
-            let blink: CGFloat = (blinkCycle > 2.1 && blinkCycle < 2.25) ? 0.1 : 1.0
+            let blink = max(0.1, MascotMotion.blink(t, seed: 0x9bb))
             let keyPhase = Int(t / 0.1) % 6
             Canvas { c, sz in
                 let v = V(sz, svgW: 16, svgH: 14, svgY0: 3)

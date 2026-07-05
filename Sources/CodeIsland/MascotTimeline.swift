@@ -29,6 +29,7 @@ struct MascotTimeline<Content: View>: View {
     @Environment(\.mascotSpeed) private var speed
     @Environment(\.mascotAnimationsActive) private var animationsActive
     @Environment(\.mascotAnimationEpoch) private var animationEpoch
+    @Environment(\.mascotStaticTime) private var staticTimeOverride
 
     var body: some View {
         if animationsActive {
@@ -37,7 +38,23 @@ struct MascotTimeline<Content: View>: View {
             }
             .id(animationEpoch)
         } else {
-            content(staticTime)
+            content(staticTimeOverride ?? staticTime)
         }
+    }
+}
+
+// MARK: - Static-frame override (render harness)
+
+private struct MascotStaticTimeKey: EnvironmentKey {
+    static let defaultValue: Double? = nil
+}
+
+extension EnvironmentValues {
+    /// When set (and animations are gated off), MascotTimeline renders its
+    /// single static frame at this timeline instant instead of `staticTime`.
+    /// Used by the offscreen contact-sheet harness to inspect specific frames.
+    var mascotStaticTime: Double? {
+        get { self[MascotStaticTimeKey.self] }
+        set { self[MascotStaticTimeKey.self] = newValue }
     }
 }

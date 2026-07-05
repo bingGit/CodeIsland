@@ -159,8 +159,9 @@ struct CopilotView: View {
     }
 
     private func sleepCanvas(t: Double) -> some View {
-        let phase = t.truncatingRemainder(dividingBy: 4.0) / 4.0
-        let float = sin(phase * .pi * 2) * 0.8
+        // Two incommensurate drift periods — the float never quite repeats,
+        // and every mascot has its own rhythm so multi-session rows don't sync (#15).
+        let float = sin(t * 2 * .pi / 4.21) * 0.68 + sin(t * 2 * .pi / 6.85) * 0.36
 
         return Canvas { c, sz in
             let v = V(sz)
@@ -181,7 +182,11 @@ struct CopilotView: View {
     }
 
     private func workCanvas(t: Double) -> some View {
-        let bounce = sin(t * 2 * .pi / 0.4) * 1.0
+        // Work pause: every ~12s the bounce settles for a beat —
+        // reading output, not hammering keys nonstop (#15).
+        let workPause = MascotMotion.quirk(t, cycle: 11.6, duration: 1.2, seed: 0x8f8)
+        let bounce = sin(t * 2 * .pi / 0.4) * 1.0 * (1 - workPause)
+            + sin(t * 2 * .pi / 2.9) * 0.3 * workPause
         let keyPhase = Int(t / 0.1) % 6
 
         // Blink

@@ -85,15 +85,20 @@ struct ClawdView: View {
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // Draw sleeping character (sploot pose from clawd-sleeping.svg)
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    private func drawSleeping(_ ctx: GraphicsContext, v: V, breathe: CGFloat) {
+    private func drawSleeping(_ ctx: GraphicsContext, v: V, breathe: CGFloat, t: Double) {
         // Shadow (wider for sploot, pulses with breath)
         let shadowScale: CGFloat = 1.0 + breathe * 0.03
         ctx.fill(Path(v.r(-1, 15, 17 * shadowScale, 1)),
                  with: .color(.black.opacity(0.35 + breathe * 0.08)))
 
-        // Legs pointing up from behind (wider 1×2 blocks for visibility)
-        for x: CGFloat in [3, 5, 9, 11] {
-            ctx.fill(Path(v.r(x, 8.5, 1, 1.5)), with: .color(Self.bodyC))
+        // Legs pointing up from behind. One leg occasionally twitches in its
+        // sleep — the classic dreaming-pet kick (#15). Deterministic quirk:
+        // at most one twitch per ~6s cycle, sometimes skipped entirely.
+        let twitch = MascotMotion.quirk(t, cycle: 6.0, duration: 0.55, seed: 0xC1A)
+        let twitchLeg = MascotMotion.quirkVariant(t, cycle: 6.0, count: 4, seed: 0xC1A)
+        for (i, x) in ([3, 5, 9, 11] as [CGFloat]).enumerated() {
+            let kick: CGFloat = i == twitchLeg ? twitch * 0.9 : 0
+            ctx.fill(Path(v.r(x, 8.5 - kick, 1, 1.5 + kick)), with: .color(Self.bodyC))
         }
 
         // Flattened torso — big puff on inhale (25% from SVG)
@@ -108,10 +113,13 @@ struct ClawdView: View {
         ctx.fill(Path(v.r(-1, 13, 2, 2)), with: .color(Self.bodyC))
         ctx.fill(Path(v.r(14, 13, 2, 2)), with: .color(Self.bodyC))
 
-        // Shut eyes (thicker for visibility, move with puff)
-        let eyeY: CGFloat = 12.2 - puff * 2.5
-        ctx.fill(Path(v.r(3, eyeY, 2.5, 1.0)), with: .color(Self.eyeC))
-        ctx.fill(Path(v.r(9.5, eyeY, 2.5, 1.0)), with: .color(Self.eyeC))
+        // Shut eyes (thicker for visibility, move with puff). A rare REM
+        // flutter narrows them for a beat — dreaming, not just parked.
+        let rem = MascotMotion.quirk(t, cycle: 9.0, duration: 0.7, seed: 0x5EE)
+        let eyeH: CGFloat = 1.0 - rem * 0.5
+        let eyeY: CGFloat = 12.2 - puff * 2.5 + (1.0 - eyeH) / 2
+        ctx.fill(Path(v.r(3, eyeY, 2.5, eyeH)), with: .color(Self.eyeC))
+        ctx.fill(Path(v.r(9.5, eyeY, 2.5, eyeH)), with: .color(Self.eyeC))
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -158,12 +166,13 @@ struct ClawdView: View {
     }
 
     private func sleepCanvas(t: Double) -> some View {
-        let phase = t.truncatingRemainder(dividingBy: 4.5) / 4.5
-        let breathe: CGFloat = phase < 0.4 ? sin(phase / 0.4 * .pi) : 0
+        // Asymmetric breath (quick inhale, slow exhale, rest) reads far more
+        // alive than the old symmetric sin pulse.
+        let breathe = MascotMotion.breathe(t, period: 4.5)
 
         return Canvas { c, sz in
             let v = V(sz, svgW: 17, svgH: 7, svgY0: 9)
-            drawSleeping(c, v: v, breathe: breathe)
+            drawSleeping(c, v: v, breathe: breathe, t: t)
         }
     }
 
@@ -177,30 +186,39 @@ struct ClawdView: View {
     }
 
     private func workCanvas(t: Double) -> some View {
-        // Body bounce: 0.35s (matches SVG)
-        let bounce = sin(t * 2 * .pi / 0.35) * 1.2
+        // Thinking pause: every ~11s Clawd stops typing for a beat, hands
+        // hovering, eyes drifting up — bursts feel intentional, not looped (#15).
+        let pause = MascotMotion.quirk(t, cycle: 11.0, duration: 1.4, seed: 0x7A9)
+        let typingIntensity = 1.0 - Double(pause)
+
+        // Body bounce softens to a breath-sway while pausing.
+        let bounce = sin(t * 2 * .pi / 0.35) * 1.2 * typingIntensity
+            + sin(t * 2 * .pi / 2.8) * 0.35 * (1 - typingIntensity)
         let breathe = sin(t * 2 * .pi / 3.2)
 
-        // Arm typing: fast, correct direction (inward toward keyboard)
-        // Left: -10° to -55° (0.15s cycle), Right: 10° to 55° (0.12s cycle)
-        let armLRaw = sin(t * 2 * .pi / 0.15)  // -1..1
+        // Arm typing with humanized cadence: strokes occasionally skip
+        // (bursts and micro-pauses), and both arms lift while thinking.
+        let strokeL = MascotMotion.typingStroke(t, cadence: 0.15, seed: 0x1EF7)
+        let strokeR = MascotMotion.typingStroke(t, cadence: 0.12, seed: 0x819)
+        let armLRaw = (strokeL.active ? sin(t * 2 * .pi / 0.15) : -0.6) * typingIntensity
+        let armRRaw = (strokeR.active ? sin(t * 2 * .pi / 0.12) : -0.6) * typingIntensity
         let armL = armLRaw * 22.5 - 32.5        // -55 to -10
-        let armRRaw = sin(t * 2 * .pi / 0.12)
         let armR = armRRaw * 22.5 + 32.5        // 10 to 55
 
-        // Key flash synced: flash left keys when left arm is down (armLRaw > 0.5)
-        let leftHit = armLRaw > 0.3
-        let rightHit = armRRaw > 0.3
-        // Randomize which key flashes using time
-        let leftKeyCol = Int(t / 0.15) % 3     // 0..2 (left side keys)
-        let rightKeyCol = 3 + Int(t / 0.12) % 3 // 3..5 (right side keys)
+        // Key flash only on real strokes.
+        let leftHit = strokeL.active && armLRaw > 0.3
+        let rightHit = strokeR.active && armRRaw > 0.3
+        // Vary which key lights per stroke slot (deterministic).
+        let leftKeyCol = Int(MascotMotion.hash01(strokeL.slot, seed: 0xFACE0) * 3)
+        let rightKeyCol = 3 + Int(MascotMotion.hash01(strokeR.slot, seed: 0xFACE1) * 3)
 
-        // Eyes: squinted, occasional scan up
+        // Eyes: squinted while typing; look up during the thinking pause or
+        // the occasional screen-scan; natural blink cadence on top.
         let scanPhase = t.truncatingRemainder(dividingBy: 10.0)
-        let eyeScale: CGFloat = (scanPhase > 5.7 && scanPhase < 6.9) ? 1.0 : 0.5
+        let scanning = scanPhase > 5.7 && scanPhase < 6.9
+        let eyeScale: CGFloat = (scanning || pause > 0.3) ? 1.0 : 0.5
         let eyeDY: CGFloat = eyeScale < 0.8 ? 1.0 : -0.5
-        let blinkPhase = t.truncatingRemainder(dividingBy: 3.5)
-        let finalEyeScale = (blinkPhase > 1.4 && blinkPhase < 1.55) ? 0.1 : eyeScale
+        let finalEyeScale = eyeScale * max(0.1, MascotMotion.blink(t, seed: 0xB1))
 
         return Canvas { c, sz in
             let v = V(sz, svgW: 16, svgH: 11, svgY0: 5.5)
