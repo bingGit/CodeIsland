@@ -117,6 +117,7 @@ private struct RemoteHostsPage: View {
     @State private var port = ""
     @State private var identityFile = ""
     @State private var authSocket = ""
+    @State private var cwdFilter = ""
     @State private var autoConnect = false
 
     var body: some View {
@@ -140,6 +141,11 @@ private struct RemoteHostsPage: View {
                 TextField(l10n["remote_identity"], text: $identityFile)
                 TextField(l10n["remote_auth_socket"], text: $authSocket,
                           prompt: Text(l10n["remote_auth_socket_placeholder"]))
+                TextField(l10n["remote_cwd_filter"], text: $cwdFilter,
+                          prompt: Text(l10n["remote_cwd_filter_placeholder"]))
+                Text(l10n["remote_cwd_filter_hint"])
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Toggle(l10n["remote_auto_connect"], isOn: $autoConnect)
 
                 Button(l10n["remote_add_button"]) {
@@ -154,7 +160,8 @@ private struct RemoteHostsPage: View {
                         port: Int(port.trimmingCharacters(in: .whitespacesAndNewlines)),
                         identityFile: identityFile.trimmingCharacters(in: .whitespacesAndNewlines),
                         autoConnect: autoConnect,
-                        authSocket: authSocket.trimmingCharacters(in: .whitespacesAndNewlines)
+                        authSocket: authSocket.trimmingCharacters(in: .whitespacesAndNewlines),
+                        cwdFilter: cwdFilter.trimmingCharacters(in: .whitespacesAndNewlines)
                     ))
 
                     name = ""
@@ -163,6 +170,7 @@ private struct RemoteHostsPage: View {
                     port = ""
                     identityFile = ""
                     authSocket = ""
+                    cwdFilter = ""
                     autoConnect = false
                 }
                 .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -183,6 +191,8 @@ private struct RemoteHostRow: View {
     @ObservedObject private var l10n = L10n.shared
     @ObservedObject private var remoteManager = RemoteManager.shared
     let host: RemoteHost
+
+    @State private var cwdFilterDraft = ""
 
     private var status: SSHForwarder.Status {
         remoteManager.connectionStatus[host.id] ?? .disconnected
@@ -228,6 +238,15 @@ private struct RemoteHostRow: View {
                     .lineLimit(2)
             }
 
+            // Editable per-host session scope (#240) — saved on submit / focus loss.
+            TextField(l10n["remote_cwd_filter"], text: $cwdFilterDraft,
+                      prompt: Text(l10n["remote_cwd_filter_placeholder"]))
+                .font(.system(size: 11, design: .monospaced))
+                .textFieldStyle(.roundedBorder)
+                .onAppear { cwdFilterDraft = host.cwdFilter }
+                .onChange(of: host.cwdFilter) { _, newValue in cwdFilterDraft = newValue }
+                .onSubmit { saveCwdFilter() }
+
             HStack(spacing: 8) {
                 switch status {
                 case .connected, .connecting:
@@ -253,6 +272,14 @@ private struct RemoteHostRow: View {
             .buttonStyle(.bordered)
         }
         .padding(.vertical, 4)
+    }
+
+    private func saveCwdFilter() {
+        let trimmed = cwdFilterDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed != host.cwdFilter else { return }
+        var updated = host
+        updated.cwdFilter = trimmed
+        remoteManager.updateHost(updated)
     }
 }
 

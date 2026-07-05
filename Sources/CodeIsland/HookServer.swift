@@ -140,6 +140,28 @@ class HookServer {
         return false
     }
 
+    /// Per-host cwd ALLOW-list for remote sessions (#240) — on shared remote
+    /// accounts, users can scope the panel to their own project directories.
+    /// Empty filter = allow everything (previous behavior). With a filter set,
+    /// events must carry a cwd containing one of the entries; events without a
+    /// cwd are dropped too — on a shared account they can't be attributed.
+    nonisolated static func remoteEventPassesCwdFilter(cwd: String?, filterCSV: String) -> Bool {
+        let hasPattern = filterCSV
+            .split(separator: ",", omittingEmptySubsequences: false)
+            .contains { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        guard hasPattern else { return true }
+        guard let cwd, !cwd.isEmpty else { return false }
+        return cwdMatchesAnyPattern(cwd, patternsCSV: filterCSV)
+    }
+
+    /// Looks up the configured cwd filter for a remote host id. Nil when the
+    /// event is not remote or the host is no longer configured.
+    private static func remoteCwdFilter(for event: HookEvent) -> String? {
+        guard let hostId = event.rawJSON["_remote_host_id"] as? String,
+              !hostId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return RemoteManager.shared.hosts.first(where: { $0.id == hostId })?.cwdFilter
+    }
+
     /// Fire-and-forget POST of the hook event to a user-configured webhook URL.
     /// Wraps the raw event in a small envelope (event/source/session/cwd/tool/raw)
     /// so users on the receiving side don't need to dig through bridge-internal
@@ -421,6 +443,15 @@ class HookServer {
         if let cwd = event.rawJSON["cwd"] as? String,
            !cwd.isEmpty,
            Self.eventMatchesExcludedCwd(cwd) {
+            sendResponse(connection: connection, data: Data("{}".utf8))
+            return
+        }
+
+        // Per-host cwd allow-list for remote sessions (#240): on a shared remote
+        // account every user's hooks reach every connected client — scope this
+        // panel to the configured working directories and drop the rest.
+        if let filterCSV = Self.remoteCwdFilter(for: event),
+           !Self.remoteEventPassesCwdFilter(cwd: event.rawJSON["cwd"] as? String, filterCSV: filterCSV) {
             sendResponse(connection: connection, data: Data("{}".utf8))
             return
         }
