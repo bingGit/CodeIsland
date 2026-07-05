@@ -232,6 +232,15 @@ def write_opencode_config(path, data):
 def command_for(source):
     return f"CODEISLAND_SOCKET_PATH={socket_path} CODEISLAND_REMOTE_HOST_ID={json.dumps(host_id)} CODEISLAND_REMOTE_HOST_NAME={json.dumps(host_name)} CODEISLAND_SOURCE={source} python3 ~/.codeisland/codeisland-remote-hook.py"
 
+def append_our_hooks(hooks, event, entries):
+    # Preserve user-authored entries (#242): remove_our_hooks() already dropped our
+    # stale entries, so append the fresh managed ones AFTER whatever the user has,
+    # mirroring the local ConfigInstaller merge semantics. Never replace the event key.
+    existing = hooks.get(event)
+    if not isinstance(existing, list):
+        existing = []
+    hooks[event] = existing + entries
+
 def remove_our_hooks(hooks):
     for event in list(hooks.keys()):
         entries = hooks.get(event)
@@ -539,13 +548,13 @@ def install_claude():
         {"matcher": "auto", "hooks": [{"type": "command", "command": cmd, "timeout": 60}]},
         {"matcher": "manual", "hooks": [{"type": "command", "command": cmd, "timeout": 60}]},
     ]
-    hooks["UserPromptSubmit"] = without_matcher
-    hooks["PermissionRequest"] = with_long_timeout
-    hooks["Notification"] = with_matcher
-    hooks["Stop"] = without_matcher
-    hooks["SessionStart"] = without_matcher
-    hooks["SessionEnd"] = without_matcher
-    hooks["PreCompact"] = precompact
+    append_our_hooks(hooks, "UserPromptSubmit", without_matcher)
+    append_our_hooks(hooks, "PermissionRequest", with_long_timeout)
+    append_our_hooks(hooks, "Notification", with_matcher)
+    append_our_hooks(hooks, "Stop", without_matcher)
+    append_our_hooks(hooks, "SessionStart", without_matcher)
+    append_our_hooks(hooks, "SessionEnd", without_matcher)
+    append_our_hooks(hooks, "PreCompact", precompact)
     data["hooks"] = hooks
     write_json(settings_path, data)
     return "Claude ok"
@@ -774,9 +783,9 @@ def install_codex():
 
     cmd = command_for("codex")
     entry = [{"hooks": [{"type": "command", "command": cmd, "timeout": 60}]}]
-    hooks["SessionStart"] = entry
-    hooks["UserPromptSubmit"] = entry
-    hooks["Stop"] = entry
+    append_our_hooks(hooks, "SessionStart", entry)
+    append_our_hooks(hooks, "UserPromptSubmit", entry)
+    append_our_hooks(hooks, "Stop", entry)
     data["hooks"] = hooks
     write_json(hooks_path, data)
     ensure_toml_codex_hooks(codex_root / "config.toml")
@@ -800,13 +809,13 @@ def install_codebuddy():
         {"matcher": "auto", "hooks": [{"type": "command", "command": cmd, "timeout": 60}]},
         {"matcher": "manual", "hooks": [{"type": "command", "command": cmd, "timeout": 60}]},
     ]
-    hooks["UserPromptSubmit"] = without_matcher
-    hooks["PermissionRequest"] = with_long_timeout
-    hooks["Notification"] = with_matcher
-    hooks["Stop"] = without_matcher
-    hooks["SessionStart"] = without_matcher
-    hooks["SessionEnd"] = without_matcher
-    hooks["PreCompact"] = precompact
+    append_our_hooks(hooks, "UserPromptSubmit", without_matcher)
+    append_our_hooks(hooks, "PermissionRequest", with_long_timeout)
+    append_our_hooks(hooks, "Notification", with_matcher)
+    append_our_hooks(hooks, "Stop", without_matcher)
+    append_our_hooks(hooks, "SessionStart", without_matcher)
+    append_our_hooks(hooks, "SessionEnd", without_matcher)
+    append_our_hooks(hooks, "PreCompact", precompact)
     data["hooks"] = hooks
     write_json(settings_path, data)
     return "CodeBuddy ok"
@@ -888,9 +897,9 @@ def install_custom():
             event = ev[0]
             timeout = ev[1]
             if cli["format"] == "claude":
-                hooks[event] = [{"matcher": "*", "hooks": [{"type": "command", "command": cmd, "timeout": timeout}]}]
+                append_our_hooks(hooks, event, [{"matcher": "*", "hooks": [{"type": "command", "command": cmd, "timeout": timeout}]}])
             else:
-                hooks[event] = [{"hooks": [{"type": "command", "command": cmd, "timeout": timeout}]}]
+                append_our_hooks(hooks, event, [{"hooks": [{"type": "command", "command": cmd, "timeout": timeout}]}])
         data[cli["config_key"]] = hooks
         write_json(config_path, data)
         results.append(cli["name"] + " ok")
