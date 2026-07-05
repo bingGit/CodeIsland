@@ -119,7 +119,11 @@ final class AppState {
     var completionHasBeenEntered = false
     /// Auto-collapse timer fired but mouse is inside panel — defer collapse until mouse leaves
     var deferCollapseOnMouseLeave = false
-    private var processMonitors: [String: (source: DispatchSourceProcess, process: ProcessIdentity)] = [:]
+    /// `attachParentPid` is the monitored process's ppid captured when the monitor was
+    /// attached. Processes that already had ppid <= 1 at attach time are launchd-managed
+    /// daemons (e.g. a Hermes gateway with KeepAlive=true), NOT orphans of a closed
+    /// terminal — they must never be terminated by orphan cleanup (#243).
+    private var processMonitors: [String: (source: DispatchSourceProcess, process: ProcessIdentity, attachParentPid: pid_t?)] = [:]
     private var exitingSessions: [String: ProcessIdentity] = [:]
     private var saveTimer: Timer?
     private var fsEventStream: FSEventStreamRef?
@@ -176,10 +180,12 @@ final class AppState {
                 deadMonitors.append((sessionId, process))
                 continue
             }
-            // Check for orphaned processes (ppid <= 1)
-            var info = proc_bsdinfo()
-            let ret = proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, Int32(MemoryLayout<proc_bsdinfo>.size))
-            if ret > 0 && info.pbi_ppid <= 1 && shouldTerminateOrphanedProcess(sessionId: sessionId, pid: pid) {
+            // Check for orphaned processes: ppid <= 1 now, but only if the process had a
+            // real parent when we attached. A process whose ppid was already <= 1 at attach
+            // time is a launchd-managed daemon, not a terminal orphan — killing it puts
+            // KeepAlive daemons into a SIGTERM/restart loop (#243).
+            if Self.isReparentedOrphan(currentParentPid: Self.parentPid(of: pid), attachParentPid: monitor.attachParentPid)
+                && shouldTerminateOrphanedProcess(sessionId: sessionId, pid: pid) {
                 orphaned.append((sessionId, pid))
             }
         }
@@ -189,6 +195,7 @@ final class AppState {
             handleProcessExit(sessionId: sessionId, exitedProcess: process)
         }
         for (sessionId, pid) in orphaned {
+            log.notice("⚠️ terminating reparented orphan pid=\(pid, privacy: .public) session=\(sessionId, privacy: .public)")
             kill(pid, SIGTERM)
             removeSession(sessionId)
         }
@@ -339,6 +346,24 @@ final class AppState {
         return !Self.isNativeAppProcess(pid, source: source)
     }
 
+    /// Current ppid of `pid`, or nil if the process is gone / info is unavailable.
+    nonisolated static func parentPid(of pid: pid_t) -> pid_t? {
+        var info = proc_bsdinfo()
+        let ret = proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, Int32(MemoryLayout<proc_bsdinfo>.size))
+        guard ret > 0 else { return nil }
+        return pid_t(info.pbi_ppid)
+    }
+
+    /// A process counts as a terminal orphan only when it USED to have a real parent
+    /// (attachParentPid > 1) and has since been reparented to launchd/init (ppid <= 1).
+    /// Daemons started by launchd have ppid <= 1 from the beginning and are never
+    /// orphans, no matter how long they run (#243). Unknown attach ppid stays safe: no kill.
+    nonisolated static func isReparentedOrphan(currentParentPid: pid_t?, attachParentPid: pid_t?) -> Bool {
+        guard let currentParentPid, currentParentPid <= 1 else { return false }
+        guard let attachParentPid, attachParentPid > 1 else { return false }
+        return true
+    }
+
     private nonisolated static func liveProcessIdentity(for pid: pid_t) -> ProcessIdentity? {
         guard pid > 0, kill(pid, 0) == 0 else { return nil }
         return ProcessIdentity(pid: pid, startTime: getProcessStartTime(pid))
@@ -431,7 +456,7 @@ final class AppState {
             }
         }
         source.resume()
-        processMonitors[sessionId] = (source: source, process: process)
+        processMonitors[sessionId] = (source: source, process: process, attachParentPid: Self.parentPid(of: process.pid))
         exitingSessions.removeValue(forKey: sessionId)
 
         // Keep cliPid aligned with the monitored process unless we already have a different
