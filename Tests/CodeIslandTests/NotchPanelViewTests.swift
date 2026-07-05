@@ -177,3 +177,52 @@ final class NotchPanelViewTests: XCTestCase {
     }
 
 }
+
+// MARK: - Hover phase state machine (PR #208)
+
+final class NotchHoverInteractionTests: XCTestCase {
+    func testQuickPassThroughReversesPrehoverWithoutExpanding() {
+        var phase = NotchHoverInteraction.nextPhase(from: .collapsed, event: .mouseEntered)
+        XCTAssertEqual(phase, .prehover)
+
+        phase = NotchHoverInteraction.nextPhase(from: phase, event: .mouseExited)
+        XCTAssertEqual(phase, .collapsed)
+
+        // The stale expand timer firing after the mouse left must not expand.
+        phase = NotchHoverInteraction.nextPhase(from: phase, event: .expandDelayElapsed)
+        XCTAssertEqual(phase, .collapsed)
+    }
+
+    func testDwellExpandsThenCollapsesAfterLeaveDelay() {
+        var phase = NotchHoverInteraction.nextPhase(from: .collapsed, event: .mouseEntered)
+        phase = NotchHoverInteraction.nextPhase(from: phase, event: .expandDelayElapsed)
+        XCTAssertEqual(phase, .expanded)
+
+        // Leaving alone doesn't collapse an expanded panel — the delay does.
+        phase = NotchHoverInteraction.nextPhase(from: phase, event: .mouseExited)
+        XCTAssertEqual(phase, .expanded)
+
+        phase = NotchHoverInteraction.nextPhase(from: phase, event: .collapseDelayElapsed)
+        XCTAssertEqual(phase, .collapsed)
+    }
+
+    func testCollapseDelayWhileNotExpandedIsANoOp() {
+        XCTAssertEqual(NotchHoverInteraction.nextPhase(from: .collapsed, event: .collapseDelayElapsed), .collapsed)
+        XCTAssertEqual(NotchHoverInteraction.nextPhase(from: .prehover, event: .collapseDelayElapsed), .prehover)
+    }
+
+    func testWidthScaleSliderUsesOnePercentSteps() {
+        XCTAssertEqual(NotchWidthScale.min, 50)
+        XCTAssertEqual(NotchWidthScale.max, 150)
+        XCTAssertEqual(NotchWidthScale.step, 1)
+    }
+
+    func testEffectiveNotchWidthClampsToSharedBounds() {
+        // Physical notch is never scaled.
+        XCTAssertEqual(NotchWidthMetrics.effectiveNotchWidth(notchW: 200, collapsedWidthScale: 80, hasNotch: true), 200)
+        // Simulated notch scales and clamps to NotchWidthScale bounds.
+        XCTAssertEqual(NotchWidthMetrics.effectiveNotchWidth(notchW: 200, collapsedWidthScale: 75, hasNotch: false), 150)
+        XCTAssertEqual(NotchWidthMetrics.effectiveNotchWidth(notchW: 200, collapsedWidthScale: 10, hasNotch: false), 100)
+        XCTAssertEqual(NotchWidthMetrics.effectiveNotchWidth(notchW: 200, collapsedWidthScale: 900, hasNotch: false), 300)
+    }
+}

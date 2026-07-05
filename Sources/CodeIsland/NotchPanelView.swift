@@ -1,11 +1,61 @@
 import SwiftUI
 import CodeIslandCore
 
+/// Shared bounds for the collapsed-width scale setting — keeps the settings
+/// slider and the width math in lockstep. Percent of the simulated notch width.
+enum NotchWidthScale {
+    static let min = 50
+    static let max = 150
+    static let step = 1
+}
+
 enum NotchWidthMetrics {
     static func effectiveNotchWidth(notchW: CGFloat, collapsedWidthScale: Int, hasNotch: Bool) -> CGFloat {
         if hasNotch { return notchW }
-        let clampedScale = max(50, min(collapsedWidthScale, 150))
+        let clampedScale = Swift.max(NotchWidthScale.min, Swift.min(collapsedWidthScale, NotchWidthScale.max))
         return notchW * CGFloat(clampedScale) / 100.0
+    }
+}
+
+// MARK: - Hover interaction state machine
+
+/// Where the island is in its hover interaction. `prehover` is the immediate
+/// lightweight acknowledgement (slight widen + scale) shown while the expand
+/// delay is still running — a quick mouse pass-through only ever plays this
+/// first stage and reverses, instead of popping the full panel open.
+enum NotchHoverPhase {
+    case collapsed
+    case prehover
+    case expanded
+}
+
+enum NotchHoverEvent {
+    case mouseEntered
+    case mouseExited
+    case expandDelayElapsed
+    case collapseDelayElapsed
+}
+
+enum NotchHoverInteraction {
+    static let prehoverAnimationDuration: TimeInterval = 0.21
+    static let expandDelay: TimeInterval = 0.5
+    static let collapseDelay: TimeInterval = 0.5
+    static let prehoverWidthDelta: CGFloat = 7
+    static let prehoverScale: CGFloat = 1.004
+
+    static func nextPhase(from phase: NotchHoverPhase, event: NotchHoverEvent) -> NotchHoverPhase {
+        switch (phase, event) {
+        case (.collapsed, .mouseEntered):
+            return .prehover
+        case (.prehover, .mouseExited):
+            return .collapsed
+        case (.prehover, .expandDelayElapsed):
+            return .expanded
+        case (.expanded, .collapseDelayElapsed):
+            return .collapsed
+        default:
+            return phase
+        }
     }
 }
 
@@ -52,6 +102,8 @@ struct NotchPanelView: View {
     @State private var hoverTimer: Timer?
     @State private var isHovered = false
     @State private var idleHovered = false
+    /// Three-stage hover: collapsed → prehover (immediate ack) → expanded (after delay)
+    @State private var hoverPhase: NotchHoverPhase = .collapsed
     /// Curtain animation for tool status toggle
     @State private var curtainOffset: CGFloat = 0
     @State private var curtainOpacity: Double = 1
@@ -69,6 +121,11 @@ struct NotchPanelView: View {
     }
     private var shouldShowExpanded: Bool {
         showBar && appState.surface.isExpanded
+    }
+    /// Prehover acknowledgement is only rendered on the collapsed active bar —
+    /// once the surface expands (from hover or any other path) it disappears.
+    private var shouldShowPrehover: Bool {
+        showBar && !shouldShowExpanded && hoverPhase == .prehover
     }
 
     /// Mascot size — fits within the menu bar height
@@ -97,7 +154,9 @@ struct NotchPanelView: View {
         let extra: CGFloat = appState.status == .idle ? 0 : 20
         // Reserve space for tool status — proportional to screen width
         let toolExtra: CGFloat = displayedToolStatus ? (hasNotch ? screenWidth * 0.03 : screenWidth * 0.04) : 0
-        return nw + wing * 2 + extra + toolExtra
+        // Immediate hover acknowledgement: a slight widen while the expand delay runs
+        let prehoverExtra: CGFloat = shouldShowPrehover ? NotchHoverInteraction.prehoverWidthDelta : 0
+        return nw + wing * 2 + extra + toolExtra + prehoverExtra
     }
 
     var body: some View {
@@ -234,6 +293,7 @@ struct NotchPanelView: View {
                 }
             }
             .onAppear { displayedToolStatus = showToolStatus }
+            .scaleEffect(shouldShowPrehover ? NotchHoverInteraction.prehoverScale : 1, anchor: .top)
             .contentShape(Rectangle())
             .onHover { hovering in
                 // Idle indicator hover — delay un-hover to prevent oscillation when
@@ -285,9 +345,14 @@ struct NotchPanelView: View {
 
                 isHovered = hovering
                 if hovering {
-                    // Delay expansion to avoid accidental triggers
+                    // Immediate lightweight acknowledgement; a quick pass-through
+                    // only ever plays this first stage and reverses.
+                    withAnimation(NotchAnimation.hoverPrehover) {
+                        hoverPhase = NotchHoverInteraction.nextPhase(from: hoverPhase, event: .mouseEntered)
+                    }
+                    // Delay full expansion to avoid accidental triggers
                     hoverTimer?.invalidate()
-                    hoverTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { _ in
+                    hoverTimer = Timer.scheduledTimer(withTimeInterval: NotchHoverInteraction.expandDelay, repeats: false) { _ in
                         Task { @MainActor in
                             // Guard: mouse may have left during the delay
                             guard isHovered else { return }
@@ -305,6 +370,7 @@ struct NotchPanelView: View {
                                     performer.perform(.alignment, performanceTime: .default)
                                 }
                             }
+                            hoverPhase = NotchHoverInteraction.nextPhase(from: hoverPhase, event: .expandDelayElapsed)
                             withAnimation(NotchAnimation.open) {
                                 appState.surface = .sessionList
                                 appState.cancelCompletionQueue()
@@ -315,16 +381,31 @@ struct NotchPanelView: View {
                         }
                     }
                 } else {
-                    // Collapse with brief delay to prevent flicker on accidental mouse-out
+                    // Reverse the prehover acknowledgement right away…
+                    withAnimation(NotchAnimation.hoverPrehover) {
+                        hoverPhase = NotchHoverInteraction.nextPhase(from: hoverPhase, event: .mouseExited)
+                    }
+                    // …and collapse an expanded panel after a grace delay so an
+                    // accidental mouse-out doesn't flicker it shut.
                     hoverTimer?.invalidate()
-                    hoverTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: false) { _ in
+                    hoverTimer = Timer.scheduledTimer(withTimeInterval: NotchHoverInteraction.collapseDelay, repeats: false) { _ in
                         Task { @MainActor in
                             guard !isHovered else { return }
+                            hoverPhase = NotchHoverInteraction.nextPhase(from: hoverPhase, event: .collapseDelayElapsed)
                             withAnimation(NotchAnimation.close) {
                                 appState.surface = .collapsed
                             }
                         }
                     }
+                }
+            }
+            .onChange(of: appState.surface) { _, newSurface in
+                // The surface can change from outside the hover flow (auto-expand
+                // cards, click-to-close, …) — keep the phase from going stale.
+                if newSurface == .collapsed && !isHovered {
+                    hoverPhase = .collapsed
+                } else if newSurface.isExpanded && hoverPhase != .expanded {
+                    hoverPhase = .expanded
                 }
             }
 
