@@ -148,10 +148,10 @@ struct BuddyView: View {
     // ━━━━━━ SLEEP ━━━━━━
     private var sleepScene: some View {
         ZStack {
-            MascotTimeline(interval: 0.06) { t in
+            MascotTimeline(interval: 0.12) { t in
                 sleepCanvas(t: t)
             }
-            MascotTimeline(interval: 0.05) { t in
+            MascotTimeline(interval: 0.12) { t in
                 floatingZs(t: t)
             }
         }

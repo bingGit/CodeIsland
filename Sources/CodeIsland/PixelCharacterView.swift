@@ -6,7 +6,6 @@ struct ClawdView: View {
     let status: MascotAgentStatus
     var size: CGFloat = 27
     @State private var alive = false
-    @Environment(\.mascotSpeed) private var speed
     @Environment(\.mascotAnimationsActive) private var animationsActive
     @Environment(\.mascotAnimationEpoch) private var animationEpoch
 
@@ -35,25 +34,14 @@ struct ClawdView: View {
         }
     }
 
-    /// Drives `content` from a periodic `TimelineView` while animations are
-    /// active, falling back to a single static frame (rendered at a fixed
-    /// reference time) when the panel is hidden or the machine is asleep.
-    /// Keying the schedule on `animationEpoch` forces SwiftUI to re-anchor it to
-    /// the current time on wake/re-show instead of replaying missed ticks (#225).
-    @ViewBuilder
+    /// Legacy shim from before MascotTimeline existed — same behavior (#225),
+    /// now shared with every other mascot.
     private func gatedTimeline<Content: View>(
         every interval: TimeInterval,
         staticTime: Double = 0,
         @ViewBuilder content: @escaping (Double) -> Content
     ) -> some View {
-        if animationsActive {
-            TimelineView(.periodic(from: .now, by: interval)) { ctx in
-                content(ctx.date.timeIntervalSinceReferenceDate * speed)
-            }
-            .id(animationEpoch)
-        } else {
-            content(staticTime)
-        }
+        MascotTimeline(interval: interval, staticTime: staticTime, content: content)
     }
 
     // ── Coordinate helper: maps SVG units to view points ──
@@ -131,13 +119,14 @@ struct ClawdView: View {
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     private var sleepScene: some View {
         ZStack {
-            // Character body (behind)
-            gatedTimeline(every: 0.06) { t in
+            // Character body (behind) — 8fps: breathing/blinking needs no more,
+            // and the idle panel is the always-visible steady state (#14 heat).
+            gatedTimeline(every: 0.12) { t in
                 sleepCanvas(t: t)
             }
 
             // Z's — continuous float-up loop, staggered timing
-            gatedTimeline(every: 0.05) { t in
+            gatedTimeline(every: 0.12) { t in
                 floatingZs(t: t)
             }
         }

@@ -16,7 +16,11 @@ final class AppleCompanionBluetoothPeripheral: NSObject, ObservableObject {
     @Published private(set) var hasSubscribers = false
     @Published private(set) var lastError: String?
 
-    private lazy var peripheralManager = CBPeripheralManager(delegate: self, queue: nil)
+    /// Created on first ENABLE only. Instantiating CBPeripheralManager triggers
+    /// the Bluetooth TCC authorization flow, so the disabled path must never
+    /// touch it — users who never turn the iPhone companion on shouldn't get a
+    /// Bluetooth permission prompt at launch.
+    private var peripheralManager: CBPeripheralManager?
     private var notifyCharacteristic: CBMutableCharacteristic?
     private var latestChunks: [Data] = []
     private var pendingChunks: [Data] = []
@@ -32,8 +36,8 @@ final class AppleCompanionBluetoothPeripheral: NSObject, ObservableObject {
         self.enabled = enabled
 
         guard enabled else {
-            peripheralManager.stopAdvertising()
-            peripheralManager.removeAllServices()
+            peripheralManager?.stopAdvertising()
+            peripheralManager?.removeAllServices()
             advertising = false
             hasSubscribers = false
             pendingChunks = []
@@ -41,7 +45,9 @@ final class AppleCompanionBluetoothPeripheral: NSObject, ObservableObject {
             return
         }
 
-        _ = peripheralManager
+        if peripheralManager == nil {
+            peripheralManager = CBPeripheralManager(delegate: self, queue: nil)
+        }
         rebuildServiceIfReady()
     }
 
@@ -64,7 +70,7 @@ final class AppleCompanionBluetoothPeripheral: NSObject, ObservableObject {
     }
 
     private func rebuildServiceIfReady() {
-        guard enabled, peripheralManager.state == .poweredOn else { return }
+        guard enabled, let peripheralManager, peripheralManager.state == .poweredOn else { return }
 
         peripheralManager.stopAdvertising()
         peripheralManager.removeAllServices()
@@ -82,7 +88,7 @@ final class AppleCompanionBluetoothPeripheral: NSObject, ObservableObject {
     }
 
     private func startAdvertisingIfReady() {
-        guard enabled, poweredOn, !advertising else { return }
+        guard enabled, poweredOn, !advertising, let peripheralManager else { return }
 
         peripheralManager.startAdvertising([
             CBAdvertisementDataServiceUUIDsKey: [Self.serviceUUID],
@@ -97,7 +103,7 @@ final class AppleCompanionBluetoothPeripheral: NSObject, ObservableObject {
     }
 
     private func drainPendingChunks() {
-        guard let notifyCharacteristic, hasSubscribers else { return }
+        guard let notifyCharacteristic, hasSubscribers, let peripheralManager else { return }
 
         while !pendingChunks.isEmpty {
             let chunk = pendingChunks[0]

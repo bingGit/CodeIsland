@@ -104,7 +104,7 @@ struct PiView: View {
 
     private var sleepScene: some View {
         ZStack {
-            MascotTimeline(interval: 0.06) { t in
+            MascotTimeline(interval: 0.12) { t in
                 let phase = t.truncatingRemainder(dividingBy: 4.0) / 4.0
                 let float = sin(phase * .pi * 2) * 0.7
                 let blinkCycle = t.truncatingRemainder(dividingBy: 4.0)
@@ -117,7 +117,7 @@ struct PiView: View {
                     drawPiFace(c, v: v, dy: float, eyeScale: blink)
                 }
             }
-            MascotTimeline(interval: 0.05) { t in
+            MascotTimeline(interval: 0.12) { t in
                 ZStack {
                     ForEach(0..<3, id: \.self) { i in
                         let ci = Double(i)
