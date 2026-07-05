@@ -1,5 +1,5 @@
 // CodeIsland pi extension
-// version: v1
+// version: v2
 
 /**
  * @fileoverview CodeIsland Integration Extension.
@@ -276,6 +276,107 @@ export default function codeislandExtension(pi: ExtensionAPI) {
   }
 
 
+  /**
+   * Forwards an `ask` tool call to CodeIsland as an AskUserQuestion and waits
+   * for the user's on-island answer (#244).
+   *
+   * @returns A block result carrying the answers when the user answered in
+   *          CodeIsland, or `null` when the question should fall through to
+   *          OMP's own TUI dialog (skipped, denied, or CodeIsland not running).
+   */
+  async function forwardAskToCodeIsland(
+    event: { input: Record<string, unknown>; toolCallId: string },
+    ctx: { cwd: string },
+    sessionId: string,
+    sid: string,
+    tty: string | null,
+  ): Promise<{ block: true; reason: string } | null> {
+    const rawQuestions = Array.isArray(event.input.questions)
+      ? (event.input.questions as Array<Record<string, unknown>>)
+      : [];
+    if (rawQuestions.length === 0) return null;
+
+    // Map OMP's ask schema → Claude-style AskUserQuestion input.
+    const questions = rawQuestions.map((q) => {
+      const options = Array.isArray(q.options)
+        ? (q.options as Array<Record<string, unknown>>)
+            .map((o) => ({
+              label: typeof o.label === "string" ? o.label : "",
+              ...(typeof o.description === "string"
+                ? { description: o.description }
+                : {}),
+            }))
+            .filter((o) => o.label.length > 0)
+        : [];
+      return {
+        question: typeof q.question === "string" ? q.question : "Question",
+        ...(typeof q.id === "string" && q.id ? { header: q.id } : {}),
+        multiSelect: q.multi === true,
+        options,
+      };
+    });
+
+    // CodeIsland keys answers by question text, deduping repeats with `_2`,
+    // `_3`… suffixes — reproduce that here so we can translate back to ids.
+    const usedKeys = new Set<string>();
+    const answerKeys = questions.map(({ question }) => {
+      let key = question;
+      if (usedKeys.has(key)) {
+        let suffix = 2;
+        while (usedKeys.has(`${question}_${suffix}`)) suffix += 1;
+        key = `${question}_${suffix}`;
+      }
+      usedKeys.add(key);
+      return key;
+    });
+
+    pendingPermissionSessions.add(sid);
+    let response: Record<string, unknown> | null = null;
+    try {
+      response = await sendAndWaitResponse(
+        base(sessionId, ctx.cwd, {
+          hook_event_name: "PermissionRequest",
+          tool_name: "AskUserQuestion",
+          tool_input: { questions },
+          _pi_tool_call_id: event.toolCallId,
+        }, tty),
+        86_400_000, // waiting on a human — same 24h budget as PermissionRequest hooks
+      );
+    } finally {
+      pendingPermissionSessions.delete(sid);
+    }
+
+    const decision = (
+      response?.hookSpecificOutput as Record<string, unknown> | undefined
+    )?.decision as Record<string, unknown> | undefined;
+    if (decision?.behavior !== "allow") return null;
+
+    const updatedInput = decision.updatedInput as
+      | Record<string, unknown>
+      | undefined;
+    const answers = (updatedInput?.answers ?? {}) as Record<string, unknown>;
+
+    const lines = rawQuestions.map((q, i) => {
+      const id = typeof q.id === "string" && q.id ? q.id : `q${i + 1}`;
+      const value = answers[answerKeys[i]];
+      const text = Array.isArray(value)
+        ? value.map(String).join(", ")
+        : typeof value === "string"
+          ? value
+          : "";
+      return `${id}: ${text || "(no answer)"}`;
+    });
+
+    return {
+      block: true,
+      reason:
+        "The user already answered these questions through the CodeIsland desktop app. " +
+        "Their answers:\n" +
+        lines.join("\n") +
+        "\nDo not ask again — proceed using these answers.",
+    };
+  }
+
   // ── Session lifecycle ──────────────────────────────────────────────────────
 
   pi.on("session_start", async (_event, ctx) => {
@@ -345,6 +446,18 @@ export default function codeislandExtension(pi: ExtensionAPI) {
     if (event.toolName === "edit" || event.toolName === "write") {
       const path = event.input.path as string | undefined;
       if (path) toolInput.file_path = path;
+    }
+
+    // `ask` tool → mirror the question into CodeIsland's question UI (#244).
+    // tool_call fires BEFORE the TUI dialog opens and OMP awaits this handler,
+    // so we can hold the tool, let the user answer on the island (or watch/
+    // phone), and feed the answers back by blocking the tool with a result
+    // message. Skip/deny or an unreachable CodeIsland falls through to OMP's
+    // own TUI dialog — graceful degradation, never a lost question.
+    if (event.toolName === "ask") {
+      const answered = await forwardAskToCodeIsland(event, ctx, sessionId, sid, tty);
+      if (answered) return answered;
+      return undefined;
     }
 
     // Dangerous bash → send blocking PermissionRequest via bridge.
