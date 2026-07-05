@@ -7,6 +7,15 @@ enum CompanionStatus: String, Codable, Hashable {
     case waitingApproval
     case waitingQuestion
 
+    /// Tolerant decoding: a newer Mac app may ship status values this build has
+    /// never heard of. Falling back to .idle keeps the payload renderable instead
+    /// of failing the whole decode (and, on watchOS, re-crashing on the persisted
+    /// application context at every launch — #246).
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = CompanionStatus(rawValue: raw) ?? .idle
+    }
+
     var label: String {
         switch self {
         case .idle: return "空闲"
@@ -48,6 +57,12 @@ enum CompanionMessageRole: String, Codable {
     case user
     case assistant
 
+    /// Tolerant decoding — unknown roles from a newer Mac app read as assistant (#246).
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = CompanionMessageRole(rawValue: raw) ?? .assistant
+    }
+
     var label: String {
         switch self {
         case .user: return "你"
@@ -80,6 +95,41 @@ struct CompanionQuestionPayload: Codable {
     let index: Int
     let total: Int
     let allowsMultipleSelection: Bool
+
+    init(
+        header: String?,
+        question: String,
+        options: [String],
+        descriptions: [String],
+        index: Int,
+        total: Int,
+        allowsMultipleSelection: Bool
+    ) {
+        self.header = header
+        self.question = question
+        self.options = options
+        self.descriptions = descriptions
+        self.index = index
+        self.total = total
+        self.allowsMultipleSelection = allowsMultipleSelection
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case header, question, options, descriptions, index, total, allowsMultipleSelection
+    }
+
+    /// Tolerant decoding: only `question` is required. Everything else falls back to
+    /// safe defaults so a payload from a newer/older Mac app never fails the decode (#246).
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        header = try? c.decodeIfPresent(String.self, forKey: .header)
+        question = try c.decode(String.self, forKey: .question)
+        options = (try? c.decodeIfPresent([String].self, forKey: .options)) ?? []
+        descriptions = (try? c.decodeIfPresent([String].self, forKey: .descriptions)) ?? []
+        index = max(0, (try? c.decodeIfPresent(Int.self, forKey: .index)) ?? 0)
+        total = max(1, (try? c.decodeIfPresent(Int.self, forKey: .total)) ?? 1)
+        allowsMultipleSelection = (try? c.decodeIfPresent(Bool.self, forKey: .allowsMultipleSelection)) ?? false
+    }
 }
 
 struct CompanionSessionPreview: Codable, Identifiable, Hashable {
@@ -200,11 +250,13 @@ struct CompanionStatePayload: Codable {
         status = try container.decode(CompanionStatus.self, forKey: .status)
         toolName = try container.decodeIfPresent(String.self, forKey: .toolName)
         workspaceName = try container.decodeIfPresent(String.self, forKey: .workspaceName)
-        messages = try container.decode([CompanionMessagePreview].self, forKey: .messages)
-        pendingAction = try container.decodeIfPresent(CompanionPendingAction.self, forKey: .pendingAction)
-        question = try container.decodeIfPresent(CompanionQuestionPayload.self, forKey: .question)
-        sessions = try container.decodeIfPresent([CompanionSessionPreview].self, forKey: .sessions) ?? []
-        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+        messages = (try? container.decodeIfPresent([CompanionMessagePreview].self, forKey: .messages)) ?? []
+        // Unknown pending actions / malformed question payloads from a different app
+        // version degrade to nil instead of failing the whole state decode (#246).
+        pendingAction = (try? container.decodeIfPresent(CompanionPendingAction.self, forKey: .pendingAction)) ?? nil
+        question = (try? container.decodeIfPresent(CompanionQuestionPayload.self, forKey: .question)) ?? nil
+        sessions = (try? container.decodeIfPresent([CompanionSessionPreview].self, forKey: .sessions)) ?? []
+        updatedAt = (try? container.decodeIfPresent(Date.self, forKey: .updatedAt)) ?? Date()
     }
 }
 

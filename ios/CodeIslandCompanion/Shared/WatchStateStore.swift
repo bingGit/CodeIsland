@@ -27,6 +27,12 @@ enum WatchStateStore {
         return try? decoder.decode(CompanionStatePayload.self, from: data)
     }
 
+    /// Drop the persisted snapshot. Called when an incoming state fails to decode so a
+    /// poisoned payload can't put the app or widget into a relaunch crash loop (#246).
+    static func clear() {
+        defaults.removeObject(forKey: latestStateKey)
+    }
+
     private static var defaults: UserDefaults {
         UserDefaults(suiteName: appGroupIdentifier) ?? .standard
     }

@@ -94,6 +94,10 @@ final class WatchConnection: NSObject, ObservableObject {
             receiveState(nextState)
         } catch {
             lastError = error.localizedDescription
+            // A payload we can't decode would come back at every launch via the
+            // persisted snapshot / application context — drop it so one poisoned
+            // state can't wedge the app in a crash-on-open loop (#246).
+            WatchStateStore.clear()
             WKInterfaceDevice.current().play(.failure)
         }
     }
