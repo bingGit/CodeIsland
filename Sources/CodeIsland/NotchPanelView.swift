@@ -1031,12 +1031,12 @@ private struct ApprovalBar: View {
                     .onTapGesture { handleCardClick() }
             }
 
-            // Pixel-style buttons
+            // Pixel-style buttons — badge the global shortcut when one is enabled
             HStack(spacing: 6) {
-                PixelButton(label: L10n.shared["deny"], fg: .white.opacity(0.95), bg: Color(red: 0.45, green: 0.12, blue: 0.12), border: Color(red: 0.7, green: 0.25, blue: 0.25), action: onDeny)
+                PixelButton(label: L10n.shared["deny"], fg: .white.opacity(0.95), bg: Color(red: 0.45, green: 0.12, blue: 0.12), border: Color(red: 0.7, green: 0.25, blue: 0.25), hint: Self.shortcutHint(.deny), action: onDeny)
                 PixelButton(label: L10n.shared["dismiss"], fg: .white.opacity(0.95), bg: Color(red: 0.25, green: 0.25, blue: 0.25), border: Color.white.opacity(0.28), action: onDismiss)
-                PixelButton(label: L10n.shared["allow_once"], fg: .white.opacity(0.95), bg: Color(red: 0.16, green: 0.38, blue: 0.18), border: Color(red: 0.28, green: 0.62, blue: 0.32), action: onAllow)
-                PixelButton(label: L10n.shared["always"], fg: .white.opacity(0.95), bg: Color(red: 0.14, green: 0.28, blue: 0.52), border: Color(red: 0.28, green: 0.48, blue: 0.82), action: onAlwaysAllow)
+                PixelButton(label: L10n.shared["allow_once"], fg: .white.opacity(0.95), bg: Color(red: 0.16, green: 0.38, blue: 0.18), border: Color(red: 0.28, green: 0.62, blue: 0.32), hint: Self.shortcutHint(.approve), action: onAllow)
+                PixelButton(label: L10n.shared["always"], fg: .white.opacity(0.95), bg: Color(red: 0.14, green: 0.28, blue: 0.52), border: Color(red: 0.28, green: 0.48, blue: 0.82), hint: Self.shortcutHint(.approveAlways), action: onAlwaysAllow)
             }
             .padding(.horizontal, 14)
         }
@@ -1055,6 +1055,13 @@ private struct ApprovalBar: View {
     /// - nil session: play error sound + shake animation
     /// - remote session: skip (no terminal to jump to)
     /// - valid local session: activate terminal + optionally auto-collapse
+    /// Badge text for a global shortcut, shown only when the user has enabled
+    /// it in Settings — the shortcut existed but nothing surfaced it (#12 UX).
+    static func shortcutHint(_ action: ShortcutAction) -> String? {
+        guard action.isEnabled else { return nil }
+        return action.binding.displayString
+    }
+
     private func handleCardClick() {
         // Session may be nil if removed while card is still visible
         guard let session = session else {
@@ -1621,24 +1628,34 @@ private struct PixelButton: View {
     let fg: Color
     let bg: Color
     let border: Color
+    /// Optional keyboard-shortcut badge (e.g. "⌘⇧A") — discoverability for the
+    /// global approve/deny shortcuts that already exist in Settings (#12 UX).
+    var hint: String? = nil
     let action: () -> Void
     @State private var hovering = false
 
     var body: some View {
         Button(action: action) {
-            Text(label)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(fg)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 7)
-                .background(
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(hovering ? bg.opacity(1.5) : bg)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 4)
-                        .strokeBorder(hovering ? border : border.opacity(0.4), lineWidth: 1)
-                )
+            HStack(spacing: 4) {
+                Text(label)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(fg)
+                if let hint {
+                    Text(hint)
+                        .font(.system(size: 8, weight: .medium, design: .monospaced))
+                        .foregroundStyle(fg.opacity(0.55))
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(hovering ? bg.opacity(1.5) : bg)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .strokeBorder(hovering ? border : border.opacity(0.4), lineWidth: 1)
+            )
         }
         .buttonStyle(.plain)
         .onHover { h in withAnimation(NotchAnimation.micro) { hovering = h } }
