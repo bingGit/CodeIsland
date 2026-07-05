@@ -448,7 +448,26 @@ class PanelWindowController: NSObject, NSWindowDelegate {
         let dragOffset = SettingsManager.shared.allowHorizontalDrag
             ? CGFloat(SettingsManager.shared.panelHorizontalOffset)
             : 0
-        let x = clampedX(centeredX + dragOffset, panelWidth: size.width, on: screen)
+        var desiredX = centeredX + dragOffset
+
+        // #219: on external screens the simulated notch can land on third-party
+        // status items (Bartender & co.) — slide it into the nearest clear gap.
+        // A user-dragged offset is an explicit choice and always wins.
+        if SettingsManager.shared.avoidMenuBarIcons,
+           dragOffset == 0,
+           !ScreenDetector.screenHasNotch(screen) {
+            let occupied = MenuBarIconAvoidance.occupiedMenuBarRanges(on: screen)
+            desiredX = MenuBarIconAvoidance.resolvedX(
+                preferredX: desiredX,
+                panelWidth: size.width,
+                occupied: occupied,
+                screenMinX: screenFrame.minX,
+                screenMaxX: screenFrame.maxX,
+                maxShift: screenFrame.width * MenuBarIconAvoidance.maxShiftFraction
+            )
+        }
+
+        let x = clampedX(desiredX, panelWidth: size.width, on: screen)
         let y = screenFrame.maxY - size.height
         return NSRect(x: x, y: y, width: size.width, height: size.height)
     }

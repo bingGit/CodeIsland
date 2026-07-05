@@ -58,6 +58,8 @@ final class L10n: ObservableObject {
         // General
         "launch_at_login": "Launch at Login",
         "allow_horizontal_drag": "Allow Horizontal Drag",
+        "avoid_menu_bar_icons": "Avoid Menu Bar Icons",
+        "avoid_menu_bar_icons_desc": "On external screens, automatically slide the island into the nearest clear gap when it would overlap third-party menu bar icons (e.g. Bartender). Dragging the island manually overrides this.",
         "allow_horizontal_drag_desc": "Enable dragging the panel left or right along the menu bar",
         "display": "Display",
         "auto": "Auto",
@@ -381,6 +383,8 @@ final class L10n: ObservableObject {
         // General
         "launch_at_login": "Beim Anmelden starten",
         "allow_horizontal_drag": "Horizontales Ziehen erlauben",
+        "avoid_menu_bar_icons": "Menüleisten-Symbolen ausweichen",
+        "avoid_menu_bar_icons_desc": "Auf externen Bildschirmen weicht die Insel automatisch in die nächste freie Lücke aus, wenn sie Menüleisten-Symbole von Drittanbietern (z. B. Bartender) überlappen würde. Manuelles Ziehen hat Vorrang.",
         "allow_horizontal_drag_desc": "Panel entlang der Menüleiste nach links oder rechts ziehen",
         "display": "Display",
         "auto": "Automatisch",
@@ -704,6 +708,8 @@ final class L10n: ObservableObject {
         // General
         "launch_at_login": "登录时打开",
         "allow_horizontal_drag": "允许水平拖动面板",
+        "avoid_menu_bar_icons": "自动避开菜单栏图标",
+        "avoid_menu_bar_icons_desc": "在外接显示器上，当灵动岛会压住第三方菜单栏图标（如 Bartender）时，自动左右平移到最近的空档。手动拖动过位置后以手动位置优先。",
         "allow_horizontal_drag_desc": "开启后可沿菜单栏左右拖动面板位置",
         "display": "显示器",
         "auto": "自动",
@@ -1027,6 +1033,8 @@ final class L10n: ObservableObject {
         // General
         "launch_at_login": "ログイン時に起動",
         "allow_horizontal_drag": "横方向ドラッグを許可",
+        "avoid_menu_bar_icons": "メニューバーアイコンを回避",
+        "avoid_menu_bar_icons_desc": "外部ディスプレイでアイランドがサードパーティのメニューバーアイコン（Bartender など）と重なる場合、最も近い空きスペースへ自動的に移動します。手動でドラッグした位置が優先されます。",
         "allow_horizontal_drag_desc": "パネルをメニューバーに沿って左右へドラッグできるようにします",
         "display": "ディスプレイ",
         "auto": "自動",
@@ -1350,6 +1358,8 @@ final class L10n: ObservableObject {
         // General
         "launch_at_login": "로그인 시 실행",
         "allow_horizontal_drag": "가로 드래그 허용",
+        "avoid_menu_bar_icons": "메뉴 막대 아이콘 피하기",
+        "avoid_menu_bar_icons_desc": "외장 디스플레이에서 아일랜드가 서드파티 메뉴 막대 아이콘(Bartender 등)과 겹칠 경우 가장 가까운 빈 공간으로 자동 이동합니다. 수동으로 드래그한 위치가 우선합니다.",
         "allow_horizontal_drag_desc": "패널을 메뉴 막대를 따라 좌우로 드래그할 수 있게 합니다",
         "display": "디스플레이",
         "auto": "자동",
@@ -1673,6 +1683,8 @@ final class L10n: ObservableObject {
         // General
         "launch_at_login": "Girişte Aç",
         "allow_horizontal_drag": "Yatay Sürüklemeye İzin Ver",
+        "avoid_menu_bar_icons": "Menü Çubuğu Simgelerinden Kaçın",
+        "avoid_menu_bar_icons_desc": "Harici ekranlarda ada, üçüncü taraf menü çubuğu simgeleriyle (ör. Bartender) çakışacaksa otomatik olarak en yakın boşluğa kayar. Elle sürüklenen konum önceliklidir.",
         "allow_horizontal_drag_desc": "Paneli menü çubuğu boyunca sola veya sağa sürüklemeyi etkinleştir",
         "display": "Ekran",
         "auto": "Otomatik",

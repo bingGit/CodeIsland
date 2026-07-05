@@ -318,6 +318,7 @@ private struct GeneralPage: View {
     @ObservedObject private var l10n = L10n.shared
     @AppStorage(SettingsKey.displayChoice) private var displayChoice = SettingsDefaults.displayChoice
     @AppStorage(SettingsKey.allowHorizontalDrag) private var allowHorizontalDrag = SettingsDefaults.allowHorizontalDrag
+    @AppStorage(SettingsKey.avoidMenuBarIcons) private var avoidMenuBarIcons = SettingsDefaults.avoidMenuBarIcons
     @State private var launchAtLogin: Bool
 
     init() {
@@ -347,6 +348,10 @@ private struct GeneralPage: View {
                         }
                     }
                 Text(l10n["allow_horizontal_drag_desc"])
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Toggle(l10n["avoid_menu_bar_icons"], isOn: $avoidMenuBarIcons)
+                Text(l10n["avoid_menu_bar_icons_desc"])
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Picker(l10n["display"], selection: $displayChoice) {
