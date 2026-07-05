@@ -432,6 +432,8 @@ final class AppState {
         case "google-antigravity": return path.contains("/antigravity.app/contents/")
         case "workbuddy":   return path.contains("/workbuddy.app/contents/")
         case "hermes":      return path.contains("/hermes.app/contents/")
+        // Claude Code Desktop (#211): local Code-tab sessions live inside Claude.app.
+        case "claude":      return path.contains("/claude.app/contents/")
         default:           return false
         }
     }

@@ -66,6 +66,10 @@ struct TerminalActivator {
         "com.stepfun.app": "StepFun",
         "ai.opencode.desktop": "OpenCode",
         "com.workbuddy.workbuddy": "WorkBuddy",
+        // Claude Code Desktop (#211). Deliberately NOT in sourceToNativeAppBundleId:
+        // most "claude" sessions are terminal CLI runs, and that fallback would
+        // steal their click-to-jump whenever the desktop app happens to be open.
+        "com.anthropic.claudefordesktop": "Claude",
     ]
 
     static func activate(session: SessionSnapshot, sessionId: String? = nil) {

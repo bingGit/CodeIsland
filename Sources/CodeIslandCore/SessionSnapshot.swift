@@ -397,6 +397,9 @@ public struct SessionSnapshot: Sendable {
         "com.openai.codex": "Codex",
         "ai.opencode.desktop": "OpenCode",
         "com.google.antigravity": "Antigravity",
+        // Claude Code Desktop (#211): local Code-tab sessions run the same engine
+        // and fire the same ~/.claude/settings.json hooks as the CLI.
+        "com.anthropic.claudefordesktop": "Claude",
     ]
 
     /// Maps native app bundle IDs to their expected source identifier.
@@ -414,6 +417,9 @@ public struct SessionSnapshot: Sendable {
         // Google Antigravity IDE — its integrated terminal launches the agy CLI,
         // whose hooks report --source google-antigravity (#215).
         "com.google.antigravity": "google-antigravity",
+        // Claude Code Desktop (#211) — hook subprocesses inherit the app's
+        // __CFBundleIdentifier, so desktop Code sessions arrive tagged with it.
+        "com.anthropic.claudefordesktop": "claude",
     ]
 
     /// Short terminal/app name for display tag
