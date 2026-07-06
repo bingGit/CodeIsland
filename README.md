@@ -129,6 +129,16 @@ CodeIsland provides a 7-tab settings panel:
 - **Hooks** — View CLI installation status, reinstall or uninstall hooks
 - **About** — Version info and links
 
+## Keyboard Shortcuts
+
+| Shortcut | Action | Default |
+|----------|--------|---------|
+| ⌘⇧I | Toggle the island panel open/closed | On |
+| ⌘⇧A | Approve the current permission request | Off |
+| ⌘⇧D | Deny the current permission request | Off |
+
+All shortcuts are configurable — and more actions (always-allow, skip question, jump to terminal) can be bound — under **Settings → Shortcuts**. When an approve/deny shortcut is enabled, its binding shows as a badge right on the approval card.
+
 ## Requirements
 
 - macOS 14.0 (Sonoma) or later
