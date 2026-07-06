@@ -1,5 +1,45 @@
 # Changelog
 
+## [v1.0.29] - 2026-07-06
+
+### English
+- Add OpenClaw integration — TypeScript plugin pack auto-installed and registered in ~/.openclaw/openclaw.json, with the new Molty space-lobster mascot 🦞 (#235)
+- Add Claude Code Desktop support — local Code-tab sessions are recognized, tagged, and click-to-jump activates the right desktop window; terminal CLI sessions keep jumping to their terminal (#211)
+- Add per-host working-directory filter for remote SSH hosts — on shared accounts, only sessions under your own project paths are shown (#240)
+- Bridge the OMP / pi `ask` tool into the island's question UI: answer on the Mac (or iPhone/Watch) and the answer flows back to the agent; skipping falls through to the terminal dialog (#244)
+- Auto-dodge third-party menu bar icons (e.g. Bartender) on external screens — the island slides into the nearest clear gap; a manually dragged position always wins (#219)
+- Refine notch hover: a light "acknowledged" micro-expansion first, full panel only after dwelling 0.5s — quick mouse pass-throughs no longer pop the panel; width slider now steps by 1% (#208, thanks @Lucker-QY)
+- Motion-polish across all 18 mascots: natural irregular blinks, asymmetric breathing, dream twitches, humanized typing with "reading the output" pauses, and de-synced float rhythms per character (#15)
+- Add a Kiro pixel-ghost mascot (previously fell back to Clawd) and complete the settings mascot gallery (Molty, Kiro, Google Antigravity)
+- Show enabled approve/deny shortcut bindings as badges on the approval card buttons
+- Document keyboard shortcuts in the README (#31)
+- Cut idle CPU by ~38% (8.5% → 5.3%): every mascot's frame loop now pauses while the panel is hidden or the Mac sleeps (previously only Clawd's did), idle scenes render at 8fps, and wake no longer replays missed frames (#225 follow-up)
+- Fix launchd-managed daemons (e.g. the Hermes gateway) being SIGTERM'd in a restart loop by orphan cleanup — only true terminal orphans are ever terminated (#243)
+- Fix the Watch companion crash-on-launch loop: tolerant payload decoding across app versions plus self-healing of poisoned persisted state (#246; ships with the next App Store companion build)
+- Fix remote SSH install wiping user-authored hooks on every connect — managed entries now merge after yours, idempotently (#242)
+- Fix cursor-cli / qoder-cli sessions showing the wrong mascot (#248, thanks @zephyr110)
+- Fix Bluetooth permission being requested at launch for users who never enabled the iPhone companion
+- Plus everything landed since v1.0.28: native iPad companion layout (#238), German localization (#234), Google Antigravity approval details (#233), host-GUI-client jump (#237), pi/omp mascot setting (#228)
+
+### 中文
+- 新增 OpenClaw 集成——自动安装 TypeScript 插件包并注册到 ~/.openclaw/openclaw.json，附全新太空龙虾吉祥物 Molty 🦞（#235）
+- 新增 Claude Code 桌面版支持——本地 Code 标签会话可识别、可跳转到对应窗口；终端 CLI 会话仍跳回终端（#211）
+- 远程 SSH 主机新增「工作目录过滤」——共享账号下只显示你自己项目路径下的会话（#240）
+- OMP / pi 的 `ask` 提问接入灵动岛问答 UI：在 Mac（或 iPhone/手表）上作答后自动回填给 agent，跳过则回落到终端选择框（#244）
+- 外接显示器自动避开第三方菜单栏图标（如 Bartender）——灵动岛平移到最近空档，手动拖动的位置始终优先（#219）
+- 优化 hover 手感：先给一个轻量"已感知"微扩张，停留 0.5 秒才完整展开——快速划过不再误弹面板；宽度滑块步长改为 1%（#208，感谢 @Lucker-QY）
+- 全部 18 个吉祥物动画质感升级：不规则自然眨眼、非对称呼吸、睡梦小动作、带"读输出"停顿的拟人打字、各角色漂浮节奏去同步（#15）
+- 新增 Kiro 像素幽灵吉祥物（此前沿用 Clawd 造型），设置图鉴补全（Molty、Kiro、Google Antigravity）
+- 审批卡片按钮上直接显示已启用的批准/拒绝快捷键
+- README 补充键盘快捷键文档（#31）
+- 空闲 CPU 降低约 38%（8.5% → 5.3%）：所有吉祥物的帧循环在面板隐藏/睡眠时暂停（此前只有 Clawd 生效），空闲动画降至 8fps，唤醒不再回放积压帧（#225 后续）
+- 修复 launchd 托管守护进程（如 Hermes gateway）被孤儿清理反复 SIGTERM 导致重启风暴——现在只终止真正的终端孤儿进程（#243）
+- 修复手表端启动即崩溃循环：跨版本容错解码 + 坏数据自愈（#246；随下次 App Store companion 版本生效）
+- 修复远程 SSH 每次连接都覆盖用户自定义 hooks——托管条目现在合并追加且幂等（#242）
+- 修复 cursor-cli / qoder-cli 会话显示错误吉祥物（#248，感谢 @zephyr110）
+- 修复从未启用 iPhone 配件的用户启动时被请求蓝牙权限的问题
+- 以及 v1.0.28 以来的全部改进：iPad 原生 companion 布局（#238）、德语本地化（#234）、Google Antigravity 审批详情（#233）、宿主 GUI 客户端跳转（#237）、pi/omp 吉祥物设置项（#228）
+
 ## [v1.0.28] - 2026-06-15
 
 ### English
