@@ -1024,12 +1024,15 @@ private struct MascotsPage: View {
         ("AntiGravity", "antigravity", "AntiGravity", Color(red: 0.424, green: 0.302, blue: 1.0)),
         ("WorkBuddy", "workbuddy", "WorkBuddy", Color(red: 0.475, green: 0.380, blue: 0.870)),
         ("Hermes", "hermes", "Hermes", Color(red: 0.424, green: 0.302, blue: 1.0)),
+        ("Molty", "openclaw", "OpenClaw", Color(red: 0.93, green: 0.36, blue: 0.24)),
         ("QwenBot", "qwen", "Qwen Code", Color(red: 0.486, green: 0.228, blue: 0.929)),
         ("KimiBot", "kimi", "Kimi Code CLI", Color(red: 0.29, green: 0.56, blue: 1.0)),
+        ("Kiro", "kiro", "Kiro", Color(red: 0.62, green: 0.45, blue: 1.0)),
         ("Pi", "pi", "Pi", Color(red: 0.55, green: 0.43, blue: 0.95)),
         ("Oh My Pi", "omp", "Oh My Pi", Color(red: 0.55, green: 0.43, blue: 0.95)),
         ("OpBot", "opencode", "OpenCode", Color(red: 0.55, green: 0.55, blue: 0.57)),
         ("ClineBot", "cline", "Cline", Color(red: 0.00, green: 0.70, blue: 0.49)),
+        ("Gemini", "google-antigravity", "Google Antigravity", Color(red: 0.278, green: 0.588, blue: 0.894)),
     ]
 
     var body: some View {

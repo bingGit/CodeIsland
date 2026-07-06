@@ -94,6 +94,7 @@ private struct MascotContactSheet: View {
         case "workbuddy": WorkBuddyView(status: status, size: 54)
         case "hermes": HermesView(status: status, size: 54)
         case "openclaw": OpenClawView(status: status, size: 54)
+        case "kiro": KiroView(status: status, size: 54)
         case "kimi": KimiView(status: status, size: 54)
         case "pi": PiView(status: status, size: 54)
         case "cline": ClineView(status: status, size: 54)
