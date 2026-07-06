@@ -150,6 +150,12 @@ struct ConfigInstaller {
     private static let ompAgentDir = NSHomeDirectory() + "/.omp/agent"
     private static let ompExtensionDir = NSHomeDirectory() + "/.omp/agent/extensions"
     private static let ompExtensionPath = NSHomeDirectory() + "/.omp/agent/extensions/codeisland.ts"
+    // OpenClaw (openclaw.ai) — Gateway daemon. We install a local plugin pack
+    // directory and register it in ~/.openclaw/openclaw.json via
+    // plugins.load.paths + plugins.entries.codeisland.enabled.
+    private static let openclawDir = NSHomeDirectory() + "/.openclaw"
+    private static let openclawPluginDir = NSHomeDirectory() + "/.openclaw/codeisland-plugin"
+    private static let openclawConfigPath = NSHomeDirectory() + "/.openclaw/openclaw.json"
 
 
     // Legacy paths for migration cleanup (#32)
@@ -430,6 +436,18 @@ struct ConfigInstaller {
             configKey: "",
             format: .none,
             events: []
+        ),
+        // OpenClaw — personal-assistant Gateway daemon (openclaw.ai). No shell
+        // hooks: a TypeScript plugin pack is written to ~/.openclaw/codeisland-plugin
+        // and registered in ~/.openclaw/openclaw.json. The user must restart the
+        // Gateway afterwards for the plugin to load.
+        CLIConfig(
+            name: "OpenClaw",
+            source: "openclaw",
+            configPath: ".openclaw/codeisland-plugin/index.ts",
+            configKey: "",
+            format: .none,
+            events: []
         )
     ]
 
@@ -702,7 +720,7 @@ struct ConfigInstaller {
                 if !installTraecliHooks(fm: fm) { ok = false }
             } else if cli.format == .hermes {
                 if !installHermesHooks(fm: fm) { ok = false }
-            } else if cli.source == "pi" || cli.source == "omp" {
+            } else if cli.source == "pi" || cli.source == "omp" || cli.source == "openclaw" {
                 continue
             } else {
                 if !installExternalHooks(cli: cli, fm: fm) { ok = false }
@@ -730,6 +748,11 @@ struct ConfigInstaller {
             if !installOmpExtension(fm: fm) { ok = false }
         }
 
+        // Install OpenClaw plugin
+        if isEnabled(source: "openclaw") {
+            if !installOpenclawPlugin(fm: fm) { ok = false }
+        }
+
         return ok
     }
 
@@ -750,6 +773,8 @@ struct ConfigInstaller {
                 uninstallPiExtension(fm: fm)
             } else if cli.source == "omp" {
                 uninstallOmpExtension(fm: fm)
+            } else if cli.source == "openclaw" {
+                uninstallOpenclawPlugin(fm: fm)
             } else {
                 uninstallHooks(cli: cli, fm: fm)
             }
@@ -770,6 +795,7 @@ struct ConfigInstaller {
         if source == "opencode" { return isOpencodePluginInstalled(fm: FileManager.default) }
         if source == "pi" { return isPiExtensionInstalled(fm: FileManager.default) }
         if source == "omp" { return isOmpExtensionInstalled(fm: FileManager.default) }
+        if source == "openclaw" { return isOpenclawPluginInstalled(fm: FileManager.default) }
         if source == "traecli" { return isTraecliHooksInstalled(fm: FileManager.default) }
         if source == "hermes" { return isHermesHooksInstalled(fm: FileManager.default) }
         if source == "cline" {
@@ -785,6 +811,7 @@ struct ConfigInstaller {
         if source == "opencode" { return FileManager.default.fileExists(atPath: NSHomeDirectory() + "/.config/opencode") }
         if source == "pi" { return FileManager.default.fileExists(atPath: piAgentDir) }
         if source == "omp" { return FileManager.default.fileExists(atPath: ompAgentDir) }
+        if source == "openclaw" { return FileManager.default.fileExists(atPath: openclawDir) }
         if source == "copilot" { return FileManager.default.fileExists(atPath: NSHomeDirectory() + "/.copilot") }
         if source == "cline" {
             let fm = FileManager.default
@@ -2518,6 +2545,134 @@ struct ConfigInstaller {
         fm: FileManager
     ) -> Bool {
         isPiExtensionInstalled(piExtensionPath: ompExtensionPath, fm: fm)
+    }
+
+    // MARK: - OpenClaw plugin (#235)
+
+    private static let openclawPluginVersion = "v1"
+    private static let openclawPluginFiles = ["index.ts", "openclaw.plugin.json", "package.json"]
+
+    private static func openclawPluginSource(_ file: String) -> String? {
+        let parts = file.split(separator: ".", maxSplits: 1).map(String.init)
+        let name = parts[0]
+        let ext = parts.count > 1 ? parts[1] : ""
+        if let url = Bundle.appModule.url(forResource: name, withExtension: ext, subdirectory: "Resources/codeisland-openclaw"),
+           let src = try? String(contentsOf: url) { return src }
+        if let url = Bundle.appModule.url(forResource: name, withExtension: ext, subdirectory: "codeisland-openclaw"),
+           let src = try? String(contentsOf: url) { return src }
+        return nil
+    }
+
+    /// Install the OpenClaw plugin pack (#235): write the three plugin files to
+    /// ~/.openclaw/codeisland-plugin/ and register the pack in
+    /// ~/.openclaw/openclaw.json (plugins.load.paths + plugins.entries).
+    ///
+    /// openclaw.json is JSON5 — user files with comments/trailing commas won't
+    /// parse with JSONSerialization. In that case we still install the plugin
+    /// files but REFUSE to touch the config (#89: never clobber what we can't
+    /// parse) and report failure so the UI shows the manual step.
+    @discardableResult
+    static func installOpenclawPlugin(
+        openclawDir: String = openclawDir,
+        openclawPluginDir: String = openclawPluginDir,
+        openclawConfigPath: String = openclawConfigPath,
+        fm: FileManager
+    ) -> Bool {
+        // Only engage for machines that actually have OpenClaw.
+        guard fm.fileExists(atPath: openclawDir) else { return true }
+
+        try? fm.createDirectory(atPath: openclawPluginDir, withIntermediateDirectories: true)
+        for file in openclawPluginFiles {
+            guard let source = openclawPluginSource(file) else { return false }
+            let path = openclawPluginDir + "/" + file
+            if fm.fileExists(atPath: path) { try? fm.removeItem(atPath: path) }
+            guard fm.createFile(atPath: path, contents: Data(source.utf8)) else { return false }
+        }
+
+        return registerOpenclawPlugin(
+            openclawPluginDir: openclawPluginDir,
+            openclawConfigPath: openclawConfigPath,
+            fm: fm
+        )
+    }
+
+    /// Merge our plugin registration into openclaw.json. Creates the file when
+    /// missing; refuses to rewrite one that JSONSerialization can't parse.
+    static func registerOpenclawPlugin(
+        openclawPluginDir: String,
+        openclawConfigPath: String,
+        fm: FileManager
+    ) -> Bool {
+        var config: [String: Any] = [:]
+        if let data = fm.contents(atPath: openclawConfigPath), !data.isEmpty {
+            guard let parsed = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+                return false  // JSON5 / unparseable — hands off (#89)
+            }
+            config = parsed
+        }
+
+        var plugins = config["plugins"] as? [String: Any] ?? [:]
+        var load = plugins["load"] as? [String: Any] ?? [:]
+        var paths = load["paths"] as? [Any] ?? []
+        if !paths.contains(where: { ($0 as? String) == openclawPluginDir }) {
+            paths.append(openclawPluginDir)
+        }
+        load["paths"] = paths
+        plugins["load"] = load
+
+        var entries = plugins["entries"] as? [String: Any] ?? [:]
+        var entry = entries["codeisland"] as? [String: Any] ?? [:]
+        entry["enabled"] = true
+        entries["codeisland"] = entry
+        plugins["entries"] = entries
+        config["plugins"] = plugins
+
+        guard let out = try? JSONSerialization.data(withJSONObject: config, options: [.prettyPrinted, .sortedKeys]) else {
+            return false
+        }
+        return fm.createFile(atPath: openclawConfigPath, contents: out)
+    }
+
+    static func uninstallOpenclawPlugin(
+        openclawPluginDir: String = openclawPluginDir,
+        openclawConfigPath: String = openclawConfigPath,
+        fm: FileManager
+    ) {
+        // Remove only our plugin pack, never other extensions.
+        if fm.fileExists(atPath: openclawPluginDir + "/index.ts"),
+           let data = fm.contents(atPath: openclawPluginDir + "/index.ts"),
+           String(data: data, encoding: .utf8)?.contains("CodeIsland OpenClaw plugin") == true {
+            try? fm.removeItem(atPath: openclawPluginDir)
+        }
+
+        // De-register from a parseable config; leave JSON5 configs untouched.
+        guard let data = fm.contents(atPath: openclawConfigPath),
+              var config = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              var plugins = config["plugins"] as? [String: Any] else { return }
+
+        if var load = plugins["load"] as? [String: Any], var paths = load["paths"] as? [Any] {
+            paths.removeAll { ($0 as? String) == openclawPluginDir }
+            load["paths"] = paths
+            plugins["load"] = load
+        }
+        if var entries = plugins["entries"] as? [String: Any] {
+            entries.removeValue(forKey: "codeisland")
+            plugins["entries"] = entries
+        }
+        config["plugins"] = plugins
+        if let out = try? JSONSerialization.data(withJSONObject: config, options: [.prettyPrinted, .sortedKeys]) {
+            fm.createFile(atPath: openclawConfigPath, contents: out)
+        }
+    }
+
+    static func isOpenclawPluginInstalled(
+        openclawPluginDir: String = openclawPluginDir,
+        fm: FileManager
+    ) -> Bool {
+        guard let data = fm.contents(atPath: openclawPluginDir + "/index.ts"),
+              let content = String(data: data, encoding: .utf8) else { return false }
+        return content.contains("CodeIsland OpenClaw plugin")
+            && content.contains("// version: \(openclawPluginVersion)")
     }
 
     /// Merge our plugin reference into an opencode.json file's contents.

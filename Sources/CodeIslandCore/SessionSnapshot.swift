@@ -30,6 +30,7 @@ public struct SessionSnapshot: Sendable {
         "google-antigravity",
         "workbuddy",
         "hermes",
+        "openclaw",
         "qwen",
         "kimi",
         "pi",
@@ -152,6 +153,12 @@ public struct SessionSnapshot: Sendable {
             "hermes-agents": "hermes",
             "hermes agent": "hermes",
             "hermes agents": "hermes",
+            // OpenClaw (openclaw.ai) — personal-assistant Gateway daemon,
+            // formerly branded Clawdbot. Keep the old name as an alias so
+            // events from a not-yet-renamed install land on the same source.
+            "open-claw": "openclaw",
+            "open claw": "openclaw",
+            "clawdbot": "openclaw",
             "qwen-code": "qwen",
             "qwencode": "qwen",
             "cursor-agent": "cursor-cli",
@@ -185,6 +192,7 @@ public struct SessionSnapshot: Sendable {
         if canonical.hasPrefix("antigravity") { return "antigravity" }
         if canonical.hasPrefix("workbuddy") { return "workbuddy" }
         if canonical.hasPrefix("hermes") { return "hermes" }
+        if canonical.hasPrefix("openclaw") { return "openclaw" }
         if canonical.hasPrefix("qwen") { return "qwen" }
         if canonical.hasPrefix("kiro") { return "kiro" }
         if canonical.hasPrefix("kimi") { return "kimi" }
@@ -341,6 +349,7 @@ public struct SessionSnapshot: Sendable {
         case "google-antigravity": return "Google Antigravity"
         case "workbuddy": return "WorkBuddy"
         case "hermes": return "Hermes"
+        case "openclaw": return "OpenClaw"
         case "qwen": return "Qwen Code"
         case "kimi": return "Kimi Code CLI"
         case "pi": return "Pi"
