@@ -1139,6 +1139,27 @@ private struct SoundPage: View {
     @AppStorage(SettingsKey.soundApprovalNeeded) private var soundApprovalNeeded = SettingsDefaults.soundApprovalNeeded
     @AppStorage(SettingsKey.soundPromptSubmit) private var soundPromptSubmit = SettingsDefaults.soundPromptSubmit
     @AppStorage(SettingsKey.soundBoot) private var soundBoot = SettingsDefaults.soundBoot
+    @AppStorage(SettingsKey.quietHoursEnabled) private var quietHoursEnabled = SettingsDefaults.quietHoursEnabled
+    @AppStorage(SettingsKey.quietHoursStart) private var quietHoursStart = SettingsDefaults.quietHoursStart
+    @AppStorage(SettingsKey.quietHoursEnd) private var quietHoursEnd = SettingsDefaults.quietHoursEnd
+
+    /// DatePicker works in wall-clock Dates; storage is minutes since midnight.
+    private func timeBinding(_ minutes: Binding<Int>) -> Binding<Date> {
+        Binding<Date>(
+            get: {
+                Calendar.current.date(
+                    bySettingHour: minutes.wrappedValue / 60,
+                    minute: minutes.wrappedValue % 60,
+                    second: 0,
+                    of: Date()
+                ) ?? Date()
+            },
+            set: { date in
+                let c = Calendar.current.dateComponents([.hour, .minute], from: date)
+                minutes.wrappedValue = (c.hour ?? 0) * 60 + (c.minute ?? 0)
+            }
+        )
+    }
 
     var body: some View {
         Form {
@@ -1183,6 +1204,30 @@ private struct SoundPage: View {
 
                 Section(l10n["system_section"]) {
                     SoundEventRow(title: l10n["boot_sound"], subtitle: l10n["boot_sound_desc"], soundName: "8bit_boot", isOn: $soundBoot)
+                }
+
+                Section {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Toggle(l10n["quiet_hours"], isOn: $quietHoursEnabled)
+                        Text(l10n["quiet_hours_desc"])
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                    }
+                    if quietHoursEnabled {
+                        HStack(spacing: 16) {
+                            DatePicker(
+                                l10n["quiet_hours_start"],
+                                selection: timeBinding($quietHoursStart),
+                                displayedComponents: .hourAndMinute
+                            )
+                            DatePicker(
+                                l10n["quiet_hours_end"],
+                                selection: timeBinding($quietHoursEnd),
+                                displayedComponents: .hourAndMinute
+                            )
+                        }
+                        .datePickerStyle(.field)
+                    }
                 }
             }
         }

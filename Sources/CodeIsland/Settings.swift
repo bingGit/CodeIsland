@@ -57,6 +57,10 @@ enum SettingsKey {
     static let soundApprovalNeeded = "soundApprovalNeeded"
     static let soundPromptSubmit = "soundPromptSubmit"
     static let soundBoot = "soundBoot"
+    // Quiet hours — minutes since midnight; start > end spans midnight
+    static let quietHoursEnabled = "quietHoursEnabled"
+    static let quietHoursStart = "quietHoursStart"
+    static let quietHoursEnd = "quietHoursEnd"
 
     // Shortcuts (per-action: shortcut_{action}_enabled, shortcut_{action}_keyCode, shortcut_{action}_modifiers)
     static func shortcutEnabled(_ action: String) -> String { "shortcut_\(action)_enabled" }
@@ -143,6 +147,9 @@ struct SettingsDefaults {
     static let soundApprovalNeeded = true
     static let soundPromptSubmit = false
     static let soundBoot = true
+    static let quietHoursEnabled = false
+    static let quietHoursStart = 22 * 60
+    static let quietHoursEnd = 8 * 60
 
     static let rotationInterval = 5
 

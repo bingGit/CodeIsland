@@ -214,6 +214,11 @@ final class L10n: ObservableObject {
         "choose_sound_file": "Choose Sound File",
         "reset_to_default": "Reset to Default",
         "custom_sound_set": "Custom: %@",
+        // Quiet hours
+        "quiet_hours": "Quiet Hours",
+        "quiet_hours_desc": "Mute all sound effects during this time window. If the start time is later than the end time, the window spans midnight.",
+        "quiet_hours_start": "From",
+        "quiet_hours_end": "Until",
 
         // Hooks
         "cli_status": "CLI Status",
@@ -539,6 +544,11 @@ final class L10n: ObservableObject {
         "choose_sound_file": "Sounddatei auswählen",
         "reset_to_default": "Auf Standard zurücksetzen",
         "custom_sound_set": "Eigen: %@",
+        // Quiet hours
+        "quiet_hours": "Ruhezeiten",
+        "quiet_hours_desc": "Alle Soundeffekte in diesem Zeitfenster stummschalten. Liegt die Startzeit nach der Endzeit, erstreckt sich das Fenster über Mitternacht.",
+        "quiet_hours_start": "Von",
+        "quiet_hours_end": "Bis",
 
         // Hooks
         "cli_status": "CLI-Status",
@@ -864,6 +874,11 @@ final class L10n: ObservableObject {
         "choose_sound_file": "选择音效文件",
         "reset_to_default": "恢复默认",
         "custom_sound_set": "自定义: %@",
+        // Quiet hours
+        "quiet_hours": "静默时段",
+        "quiet_hours_desc": "在该时间段内不播放任何音效。开始时间晚于结束时间时，时段跨越午夜。",
+        "quiet_hours_start": "开始",
+        "quiet_hours_end": "结束",
 
         // Hooks
         "cli_status": "CLI 状态",
@@ -1189,6 +1204,11 @@ final class L10n: ObservableObject {
         "choose_sound_file": "選擇音效檔案",
         "reset_to_default": "恢復預設",
         "custom_sound_set": "自訂：%@",
+        // Quiet hours
+        "quiet_hours": "靜音時段",
+        "quiet_hours_desc": "在該時間段內不播放任何音效。開始時間晚於結束時間時，時段跨越午夜。",
+        "quiet_hours_start": "開始",
+        "quiet_hours_end": "結束",
 
         // Hooks
         "cli_status": "CLI 狀態",
@@ -1514,6 +1534,11 @@ final class L10n: ObservableObject {
         "choose_sound_file": "サウンドファイルを選択",
         "reset_to_default": "デフォルトに戻す",
         "custom_sound_set": "カスタム: %@",
+        // Quiet hours
+        "quiet_hours": "サイレント時間帯",
+        "quiet_hours_desc": "この時間帯はすべての効果音をミュートします。開始時刻が終了時刻より遅い場合、時間帯は深夜をまたぎます。",
+        "quiet_hours_start": "開始",
+        "quiet_hours_end": "終了",
 
         // Hooks
         "cli_status": "CLI 状態",
@@ -1839,6 +1864,11 @@ final class L10n: ObservableObject {
         "choose_sound_file": "사운드 파일 선택",
         "reset_to_default": "기본값으로 재설정",
         "custom_sound_set": "사용자 지정: %@",
+        // Quiet hours
+        "quiet_hours": "무음 시간대",
+        "quiet_hours_desc": "이 시간대에는 모든 효과음을 음소거합니다. 시작 시각이 종료 시각보다 늦으면 자정을 넘는 시간대로 적용됩니다.",
+        "quiet_hours_start": "시작",
+        "quiet_hours_end": "종료",
 
         // Hooks
         "cli_status": "CLI 상태",
@@ -2164,6 +2194,11 @@ final class L10n: ObservableObject {
         "choose_sound_file": "Ses Dosyası Seç",
         "reset_to_default": "Varsayılana Sıfırla",
         "custom_sound_set": "Özel: %@",
+        // Quiet hours
+        "quiet_hours": "Sessiz Saatler",
+        "quiet_hours_desc": "Bu zaman aralığında tüm ses efektleri kapatılır. Başlangıç saati bitiş saatinden sonraysa aralık gece yarısını kapsar.",
+        "quiet_hours_start": "Başlangıç",
+        "quiet_hours_end": "Bitiş",
 
         // Hooks
         "cli_status": "CLI Durumu",
