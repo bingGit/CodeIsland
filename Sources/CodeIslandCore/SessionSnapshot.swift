@@ -21,6 +21,7 @@ public struct SessionSnapshot: Sendable {
         "copilot",
         "qoder",
         "qoder-cli",
+        "qoderwork",
         "droid",
         "codebuddy",
         "codybuddycn",
@@ -168,6 +169,10 @@ public struct SessionSnapshot: Sendable {
             "cursoragent": "cursor-cli",
             "cursorcli": "cursor-cli",
             "qodercli": "qoder-cli",
+            // QoderWork — Qoder's standalone desktop assistant app (not the
+            // IDE); own hooks file at ~/.qoderwork/settings.json (#249).
+            "qoder-work": "qoderwork",
+            "qoder work": "qoderwork",
             "kimi-cli": "kimi",
             "kimicli": "kimi",
             "kiro-cli": "kiro",
@@ -470,6 +475,7 @@ public struct SessionSnapshot: Sendable {
         case "traecli": return "Traecli"
         case "qoder": return "Qoder"
         case "qoder-cli": return "Qoder CLI"
+        case "qoderwork": return "QoderWork"
         case "droid": return "Factory"
         case "codebuddy": return "CodeBuddy"
         case "codybuddycn": return "CodyBuddyCN"

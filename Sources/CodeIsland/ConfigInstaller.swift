@@ -290,6 +290,16 @@ struct ConfigInstaller {
             format: .claude,
             events: defaultEvents(for: .claude)
         ),
+        // QoderWork — Qoder's standalone desktop assistant app (not the IDE).
+        // Claude-format hooks, but user-level ~/.qoderwork/settings.json ONLY
+        // (no project-level config) and no hot reload: the user must restart
+        // QoderWork after install/uninstall for hook changes to apply (#249).
+        CLIConfig(
+            name: "QoderWork", source: "qoderwork",
+            configPath: ".qoderwork/settings.json", configKey: "hooks",
+            format: .claude,
+            events: defaultEvents(for: .claude)
+        ),
         // Factory — Claude Code fork (uses "droid" as source identifier)
         CLIConfig(
             name: "Factory", source: "droid",

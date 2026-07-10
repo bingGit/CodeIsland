@@ -418,6 +418,10 @@ final class AppState {
         case "trae":       return path.contains("/trae.app/contents/")
         case "traecn":     return path.contains("/trae.app/contents/") || path.contains("/traecn.app/contents/")
         case "qoder":      return path.contains("/qoder.app/contents/")
+        // QoderWork desktop app (#249) — bundle id undocumented; the standard
+        // /Applications/QoderWork.app layout is assumed, pending real-install
+        // verification.
+        case "qoderwork":  return path.contains("/qoderwork.app/contents/")
         case "droid":      return path.contains("/factory.app/contents/")
         case "codebuddy":  return path.contains("/codebuddy.app/contents/")
         case "codybuddycn": return path.contains("/codebuddycn.app/contents/") || path.contains("/codebuddy.app/contents/")
@@ -739,6 +743,7 @@ final class AppState {
         case "copilot":    return findCopilotPids(candidatePids: candidatePids)
         case "qoder":      return findQoderPids(candidatePids: candidatePids)
         case "qoder-cli":  return findQoderCliPids(candidatePids: candidatePids)
+        case "qoderwork":  return findQoderWorkPids(candidatePids: candidatePids)
         case "droid":      return findFactoryPids(candidatePids: candidatePids)
         case "codebuddy":  return findCodeBuddyPids(candidatePids: candidatePids)
         case "codybuddycn": return findCodyBuddyCNPids(candidatePids: candidatePids)
@@ -2890,6 +2895,19 @@ final class AppState {
                 "/opt/homebrew/bin/qodercli",
                 "/usr/local/bin/qodercli",
                 "/.local/bin/qodercli",
+            ],
+            candidatePids: candidatePids
+        )
+    }
+
+    /// QoderWork desktop app (#249). Bundle layout is assumed from the standard
+    /// /Applications/QoderWork.app install — no public bundle id / binary name
+    /// docs, pending real-install verification. "/qoderwork.app/" never collides
+    /// with the IDE's "/qoder.app/" substrings.
+    private nonisolated static func findQoderWorkPids(candidatePids: [pid_t]? = nil) -> [pid_t] {
+        findPids(
+            matchingPathSubstrings: [
+                "/qoderwork.app/contents/",
             ],
             candidatePids: candidatePids
         )
