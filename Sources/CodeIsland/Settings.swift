@@ -62,6 +62,9 @@ enum SettingsKey {
     static let quietHoursStart = "quietHoursStart"
     static let quietHoursEnd = "quietHoursEnd"
 
+    // Session cards
+    static let showGitBranch = "showGitBranch"
+
     // Shortcuts (per-action: shortcut_{action}_enabled, shortcut_{action}_keyCode, shortcut_{action}_modifiers)
     static func shortcutEnabled(_ action: String) -> String { "shortcut_\(action)_enabled" }
     static func shortcutKeyCode(_ action: String) -> String { "shortcut_\(action)_keyCode" }
@@ -150,6 +153,7 @@ struct SettingsDefaults {
     static let quietHoursEnabled = false
     static let quietHoursStart = 22 * 60
     static let quietHoursEnd = 8 * 60
+    static let showGitBranch = true
 
     static let rotationInterval = 5
 

@@ -1864,6 +1864,7 @@ private struct SessionIdentityLine: View {
     let sessionFontSize: CGFloat
     let sessionColor: Color
     let dividerColor: Color
+    @AppStorage(SettingsKey.showGitBranch) private var showGitBranch = SettingsDefaults.showGitBranch
 
     private var displaySessionId: String { session.displaySessionId(sessionId: sessionId) }
 
@@ -1877,6 +1878,19 @@ private struct SessionIdentityLine: View {
                 color: projectColor
             )
             .layoutPriority(2)
+
+            if showGitBranch, let branch = session.gitBranch {
+                HStack(spacing: 2) {
+                    Image(systemName: "arrow.triangle.branch")
+                        .font(.system(size: max(sessionFontSize - 1, 8), weight: .semibold))
+                    Text(session.gitIsWorktree ? "\(branch) ⧉" : branch)
+                        .font(.system(size: sessionFontSize, weight: .medium, design: .monospaced))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .foregroundStyle(sessionColor.opacity(0.85))
+                .layoutPriority(1)
+            }
 
             if let sessionLabel = session.sessionLabel {
                 Text("#\(sessionLabel)")

@@ -124,6 +124,10 @@ public struct SessionSnapshot: Sendable {
     public var remoteHostName: String?
     /// nil = unchecked, false = not YOLO, true = YOLO
     public var isYoloMode: Bool?
+    /// Checked-out git branch for cwd; refreshed on cwd changes and Stop
+    /// (a turn may have switched branches). nil for non-repo and remote cwds.
+    public var gitBranch: String?
+    public var gitIsWorktree: Bool = false
 
     public init(startTime: Date = Date()) {
         self.startTime = startTime
@@ -1101,6 +1105,7 @@ private func applyEnvMetadata(into sessions: inout [String: SessionSnapshot], se
 }
 
 public func extractMetadata(into sessions: inout [String: SessionSnapshot], sessionId: String, event: HookEvent) {
+    let previousCwd = sessions[sessionId]?.cwd
     let eventCwd = event.rawJSON["cwd"] as? String
     if let cwd = eventCwd, !cwd.isEmpty,
        !SessionSnapshot.isUnhelpfulHookCwd(cwd) {
@@ -1129,6 +1134,15 @@ public func extractMetadata(into sessions: inout [String: SessionSnapshot], sess
         // transcript-based model lookup keys off it, and the display layer
         // already renders these paths as "Session".
         sessions[sessionId]?.cwd = cwd
+    }
+    // Branch refresh is bounded to cwd changes and end-of-turn: local sessions
+    // only (remote cwds don't exist on this filesystem → stays nil).
+    if sessions[sessionId]?.remoteHostId == nil,
+       let cwd = sessions[sessionId]?.cwd,
+       cwd != previousCwd || EventNormalizer.normalize(event.eventName) == "Stop" {
+        let info = GitBranchReader.read(cwd: cwd)
+        sessions[sessionId]?.gitBranch = info?.branch
+        sessions[sessionId]?.gitIsWorktree = info?.isWorktree ?? false
     }
     if let model = event.rawJSON["model"] as? String, !model.isEmpty {
         sessions[sessionId]?.model = model

@@ -178,6 +178,8 @@ final class L10n: ObservableObject {
         "unlimited": "Unlimited",
         "show_agent_details": "Show Agent Activity Details",
         "show_tool_status": "Detailed Tool Activity in Compact Bar",
+        "show_git_branch": "Show Git branch",
+        "show_git_branch_desc": "Show the checked-out branch next to the project name. Linked worktrees get a ⧉ marker.",
 
         // Mascots
         "preview_status": "Preview Status",
@@ -508,6 +510,8 @@ final class L10n: ObservableObject {
         "unlimited": "Unbegrenzt",
         "show_agent_details": "Agent-Aktivitätsdetails anzeigen",
         "show_tool_status": "Detaillierte Tool-Aktivität in der kompakten Leiste",
+        "show_git_branch": "Git-Branch anzeigen",
+        "show_git_branch_desc": "Zeigt den ausgecheckten Branch neben dem Projektnamen. Verknüpfte Worktrees erhalten eine ⧉-Markierung.",
 
         // Mascots
         "preview_status": "Statusvorschau",
@@ -838,6 +842,8 @@ final class L10n: ObservableObject {
         "unlimited": "不限制",
         "show_agent_details": "显示代理活动详情",
         "show_tool_status": "紧凑栏显示工具调用详情",
+        "show_git_branch": "显示 Git 分支",
+        "show_git_branch_desc": "在项目名旁显示当前检出的分支，linked worktree 会附加 ⧉ 标记。",
 
         // Mascots
         "preview_status": "预览状态",
@@ -1168,6 +1174,8 @@ final class L10n: ObservableObject {
         "unlimited": "不限制",
         "show_agent_details": "顯示代理活動詳情",
         "show_tool_status": "精簡列顯示工具呼叫詳情",
+        "show_git_branch": "顯示 Git 分支",
+        "show_git_branch_desc": "在專案名稱旁顯示目前簽出的分支，linked worktree 會附加 ⧉ 標記。",
 
         // Mascots
         "preview_status": "預覽狀態",
@@ -1498,6 +1506,8 @@ final class L10n: ObservableObject {
         "unlimited": "無制限",
         "show_agent_details": "エージェント活動の詳細を表示",
         "show_tool_status": "コンパクトバーに詳細なツール活動を表示",
+        "show_git_branch": "Gitブランチを表示",
+        "show_git_branch_desc": "プロジェクト名の横にチェックアウト中のブランチを表示します。リンクされた worktree には ⧉ マークが付きます。",
 
         // Mascots
         "preview_status": "プレビュー状態",
@@ -1828,6 +1838,8 @@ final class L10n: ObservableObject {
         "unlimited": "제한 없음",
         "show_agent_details": "에이전트 활동 세부 정보 표시",
         "show_tool_status": "압축 막대에 자세한 도구 활동 표시",
+        "show_git_branch": "Git 브랜치 표시",
+        "show_git_branch_desc": "프로젝트 이름 옆에 체크아웃된 브랜치를 표시합니다. 연결된 worktree에는 ⧉ 표시가 붙습니다.",
 
         // Mascots
         "preview_status": "미리보기 상태",
@@ -2158,6 +2170,8 @@ final class L10n: ObservableObject {
         "unlimited": "Sınırsız",
         "show_agent_details": "Ajan Aktivite Detaylarını Göster",
         "show_tool_status": "Kompakt Çubukta Ayrıntılı Araç Aktivitesi",
+        "show_git_branch": "Git dalını göster",
+        "show_git_branch_desc": "Proje adının yanında çıkış yapılmış dalı gösterir. Bağlı worktree'ler ⧉ işareti alır.",
 
         // Mascots
         "preview_status": "Durumu Önizleme",
