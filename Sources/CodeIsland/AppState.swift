@@ -794,6 +794,13 @@ final class AppState {
         return !isTerminalFrontmost(session)
     }
 
+    private func shouldAutoOpenQuestionSurface(for event: HookEvent) -> Bool {
+        // AskUserQuestion holds the provider/CLI until its continuation resolves,
+        // so there is no parallel terminal prompt for Smart Suppress to defer to.
+        if event.toolName == "AskUserQuestion" { return true }
+        return shouldAutoOpenPendingSurface(for: event.sessionId ?? "default")
+    }
+
     private func showCompletion(_ sessionId: String) {
         // Fast path: terminal not even frontmost — show immediately
         guard shouldSuppressAppLevel(for: sessionId) else {
@@ -1473,7 +1480,7 @@ final class AppState {
 
         if questionQueue.count == 1 {
             activeSessionId = sessionId
-            if shouldAutoOpenPendingSurface(for: sessionId) {
+            if shouldAutoOpenQuestionSurface(for: event) {
                 withAnimation(NotchAnimation.open) {
                     surface = .questionCard(sessionId: sessionId)
                 }
@@ -1719,7 +1726,7 @@ final class AppState {
         } else if let next = questionQueue.first {
             let sid = next.event.sessionId ?? "default"
             activeSessionId = sid
-            if shouldAutoOpenPendingSurface(for: sid) {
+            if shouldAutoOpenQuestionSurface(for: next.event) {
                 surface = .questionCard(sessionId: sid)
             }
             return true
