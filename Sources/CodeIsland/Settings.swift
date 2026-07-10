@@ -65,6 +65,10 @@ enum SettingsKey {
     // Session cards
     static let showGitBranch = "showGitBranch"
 
+    // Completion notification: "expand" | "glance" | "off". Successor of the
+    // boolean autoExpandOnCompletion — see AppState.completionStyle migration.
+    static let completionNotificationStyle = "completionNotificationStyle"
+
     // Shortcuts (per-action: shortcut_{action}_enabled, shortcut_{action}_keyCode, shortcut_{action}_modifiers)
     static func shortcutEnabled(_ action: String) -> String { "shortcut_\(action)_enabled" }
     static func shortcutKeyCode(_ action: String) -> String { "shortcut_\(action)_keyCode" }
@@ -229,6 +233,10 @@ class SettingsManager {
             SettingsKey.soundApprovalNeeded: SettingsDefaults.soundApprovalNeeded,
             SettingsKey.soundPromptSubmit: SettingsDefaults.soundPromptSubmit,
             SettingsKey.soundBoot: SettingsDefaults.soundBoot,
+            SettingsKey.quietHoursEnabled: SettingsDefaults.quietHoursEnabled,
+            SettingsKey.quietHoursStart: SettingsDefaults.quietHoursStart,
+            SettingsKey.quietHoursEnd: SettingsDefaults.quietHoursEnd,
+            SettingsKey.showGitBranch: SettingsDefaults.showGitBranch,
             SettingsKey.rotationInterval: SettingsDefaults.rotationInterval,
             SettingsKey.maxToolHistory: SettingsDefaults.maxToolHistory,
             SettingsKey.mascotSpeed: SettingsDefaults.mascotSpeed,

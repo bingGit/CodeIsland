@@ -550,6 +550,15 @@ private struct CompactRightWing: View {
                     NSApplication.shared.terminate(nil)
                 }
             } else {
+                // Glance completion dot — an agent finished while collapsed;
+                // cleared as soon as the panel expands.
+                if appState.glanceCompletionActive {
+                    Circle()
+                        .fill(Color(red: 0.4, green: 1.0, blue: 0.5))
+                        .frame(width: 7, height: 7)
+                        .shadow(color: Color(red: 0.4, green: 1.0, blue: 0.5).opacity(0.7), radius: 3)
+                }
+
                 // Pending approval/question badge
                 if appState.status == .waitingApproval || appState.status == .waitingQuestion {
                     Image(systemName: "bell.fill")

@@ -104,7 +104,21 @@ final class AppState {
     var pendingQuestion: QuestionRequest? { questionQueue.first }
     /// Preview-only: mock question payload for DebugHarness (no continuation needed)
     var previewQuestionPayload: QuestionPayload?
-    var surface: IslandSurface = .collapsed
+    var surface: IslandSurface = .collapsed {
+        didSet {
+            // Any expansion counts as "seen" for the glance completion dot.
+            if surface.isExpanded, glanceCompletionActive {
+                glanceDismissTask?.cancel()
+                glanceCompletionActive = false
+            }
+        }
+    }
+
+    /// Glance completion mode: an agent finished while the pill was collapsed —
+    /// light the dot instead of expanding. Cleared when the user expands the
+    /// panel, with a long failsafe so a missed dot never lingers forever.
+    var glanceCompletionActive = false
+    private var glanceDismissTask: Task<Void, Never>?
 
     var justCompletedSessionId: String? {
         if case .completionCard(let id) = surface { return id }
@@ -763,11 +777,37 @@ final class AppState {
         }
     }
 
+    enum CompletionStyle: String {
+        case expand, glance, off
+    }
+
+    /// Three-way completion notification style. Migration: the pre-glance
+    /// boolean `autoExpandOnCompletion` (#146) maps false → .off; anything
+    /// else (including "never set", which registers as true) → .expand.
+    nonisolated static func completionStyle(defaults: UserDefaults = .standard) -> CompletionStyle {
+        if let raw = defaults.string(forKey: SettingsKey.completionNotificationStyle),
+           let style = CompletionStyle(rawValue: raw) {
+            return style
+        }
+        if defaults.object(forKey: SettingsKey.autoExpandOnCompletion) != nil,
+           defaults.bool(forKey: SettingsKey.autoExpandOnCompletion) == false {
+            return .off
+        }
+        return .expand
+    }
+
     private func enqueueCompletion(_ sessionId: String) {
-        // Behavior setting (#146): respect "Auto-expand on agent completion".
-        // When disabled the panel stays compact — status indicators still
-        // update, but no completion card pops down.
-        guard UserDefaults.standard.bool(forKey: SettingsKey.autoExpandOnCompletion) else { return }
+        switch Self.completionStyle() {
+        case .off:
+            // Panel stays compact — status indicators still update, but no
+            // completion card pops down (#146).
+            return
+        case .glance:
+            flashGlanceCompletionIndicator()
+            return
+        case .expand:
+            break
+        }
 
         // Don't queue duplicates
         if completionQueue.contains(sessionId) || justCompletedSessionId == sessionId { return }
@@ -778,6 +818,17 @@ final class AppState {
         } else {
             // Show immediately
             showCompletion(sessionId)
+        }
+    }
+
+    private func flashGlanceCompletionIndicator() {
+        guard !surface.isExpanded else { return }  // user is already looking
+        glanceCompletionActive = true
+        glanceDismissTask?.cancel()
+        glanceDismissTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 600_000_000_000)
+            guard !Task.isCancelled else { return }
+            glanceCompletionActive = false
         }
     }
 

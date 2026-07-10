@@ -381,7 +381,9 @@ private struct BehaviorPage: View {
     @AppStorage(SettingsKey.smartSuppress) private var smartSuppress = SettingsDefaults.smartSuppress
     @AppStorage(SettingsKey.collapseOnMouseLeave) private var collapseOnMouseLeave = SettingsDefaults.collapseOnMouseLeave
     @AppStorage(SettingsKey.autoCollapseAfterSessionJump) private var autoCollapseAfterSessionJump = SettingsDefaults.autoCollapseAfterSessionJump
-    @AppStorage(SettingsKey.autoExpandOnCompletion) private var autoExpandOnCompletion = SettingsDefaults.autoExpandOnCompletion
+    // Seeded through the migration shim so a legacy autoExpandOnCompletion=false
+    // shows up as "off" here; writes go to the new key via onChange.
+    @State private var completionStyle: String = AppState.completionStyle().rawValue
     @AppStorage(SettingsKey.pluginSessionMode) private var pluginSessionMode = SettingsDefaults.pluginSessionMode
     @AppStorage(SettingsKey.hapticOnHover) private var hapticOnHover = SettingsDefaults.hapticOnHover
     @AppStorage(SettingsKey.hapticIntensity) private var hapticIntensity = SettingsDefaults.hapticIntensity
@@ -449,12 +451,19 @@ private struct BehaviorPage: View {
                     isOn: $autoCollapseAfterSessionJump,
                     animation: .clickJumpCollapse
                 )
-                BehaviorToggleRow(
-                    title: l10n["auto_expand_on_completion"],
-                    desc: l10n["auto_expand_on_completion_desc"],
-                    isOn: $autoExpandOnCompletion,
-                    animation: .smartSuppress
-                )
+                VStack(alignment: .leading, spacing: 2) {
+                    Picker(l10n["completion_notification"], selection: $completionStyle) {
+                        Text(l10n["completion_style_expand"]).tag(AppState.CompletionStyle.expand.rawValue)
+                        Text(l10n["completion_style_glance"]).tag(AppState.CompletionStyle.glance.rawValue)
+                        Text(l10n["completion_style_off"]).tag(AppState.CompletionStyle.off.rawValue)
+                    }
+                    .onChange(of: completionStyle) { _, newValue in
+                        UserDefaults.standard.set(newValue, forKey: SettingsKey.completionNotificationStyle)
+                    }
+                    Text(l10n["completion_notification_desc"])
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                }
                 BehaviorToggleRow(
                     title: l10n["haptic_on_hover"],
                     desc: l10n["haptic_on_hover_desc"],
