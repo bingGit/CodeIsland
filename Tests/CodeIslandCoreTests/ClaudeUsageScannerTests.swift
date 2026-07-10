@@ -69,6 +69,13 @@ final class ClaudeUsageScannerTests: XCTestCase {
         XCTAssertEqual(snap.today.inputTokens, 1100)
         XCTAssertEqual(snap.today.outputTokens, 60)
         XCTAssertEqual(snap.today.messageCount, 2)
+
+        // Hourly sparkline: index (last - hoursAgo) carries that hour's output.
+        let last = ClaudeUsageScanner.sparklineHours - 1
+        XCTAssertEqual(snap.hourlyOutputTokens.count, ClaudeUsageScanner.sparklineHours)
+        XCTAssertEqual(snap.hourlyOutputTokens[last - 1], 10)  // 1h ago
+        XCTAssertEqual(snap.hourlyOutputTokens[last - 8], 50)  // 8h ago
+        XCTAssertEqual(snap.hourlyOutputTokens.reduce(0, +), 60)
     }
 
     func testScanEmptyHome() {

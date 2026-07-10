@@ -829,7 +829,9 @@ final class AppState {
         }
     }
 
-    private func refreshClaudeUsageIfStale() {
+    /// Prewarm at launch so the footer doesn't pop in (and shift panel height)
+    /// on the first expansion.
+    func refreshClaudeUsageIfStale() {
         guard UserDefaults.standard.bool(forKey: SettingsKey.showUsageStats) else { return }
         guard !usageScanInFlight else { return }
         if let scannedAt = claudeUsage?.scannedAt, Date().timeIntervalSince(scannedAt) < 120 { return }

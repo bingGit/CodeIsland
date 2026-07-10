@@ -528,6 +528,21 @@ private struct CompactRightWing: View {
     @ObservedObject private var l10n = L10n.shared
     @AppStorage(SettingsKey.soundEnabled) private var soundEnabled = SettingsDefaults.soundEnabled
     @AppStorage(SettingsKey.showToolStatus) private var showToolStatus = SettingsDefaults.showToolStatus
+    @AppStorage(SettingsKey.quietHoursEnabled) private var quietHoursEnabled = SettingsDefaults.quietHoursEnabled
+    @AppStorage(SettingsKey.quietHoursStart) private var quietHoursStart = SettingsDefaults.quietHoursStart
+    @AppStorage(SettingsKey.quietHoursEnd) private var quietHoursEnd = SettingsDefaults.quietHoursEnd
+
+    /// Re-evaluated on every re-render; the compact bar redraws often enough
+    /// that the moon appears/disappears close to the window edges.
+    private var inQuietHours: Bool {
+        guard soundEnabled, quietHoursEnabled else { return false }
+        let c = Calendar.current.dateComponents([.hour, .minute], from: Date())
+        return SoundManager.isInQuietHours(
+            minutesSinceMidnight: (c.hour ?? 0) * 60 + (c.minute ?? 0),
+            start: quietHoursStart,
+            end: quietHoursEnd
+        )
+    }
 
     private var displaySessionId: String? {
         appState.rotatingSessionId ?? appState.activeSessionId ?? appState.sessions.keys.sorted().first
@@ -550,6 +565,14 @@ private struct CompactRightWing: View {
                     NSApplication.shared.terminate(nil)
                 }
             } else {
+                // Quiet hours active — explains why event sounds are silent.
+                if inQuietHours {
+                    Image(systemName: "moon.fill")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.35))
+                        .help(l10n["quiet_hours"])
+                }
+
                 // Glance completion dot — an agent finished while collapsed;
                 // cleared as soon as the panel expands.
                 if appState.glanceCompletionActive {
@@ -1829,7 +1852,9 @@ private struct SessionListView: View {
                 content
             }
 
-            if showUsageStats, let usage = appState.claudeUsage,
+            // Full session list only — the completion card stays focused on
+            // the finished session.
+            if showUsageStats, onlySessionId == nil, let usage = appState.claudeUsage,
                !(usage.last5h.isEmpty && usage.today.isEmpty) {
                 UsageFooterLine(usage: usage)
             }
@@ -1854,6 +1879,7 @@ private struct UsageFooterLine: View {
                 .foregroundStyle(.white.opacity(0.25))
             Text("\(l10n["usage_today"]) \(compact(usage.today))")
             Spacer()
+            UsageSparkline(buckets: usage.hourlyOutputTokens)
         }
         .font(.system(size: 10, weight: .medium, design: .monospaced))
         .foregroundStyle(.white.opacity(0.45))
@@ -1871,6 +1897,23 @@ private struct UsageFooterLine: View {
             "\(label): in \(ClaudeUsageScanner.formatTokens(t.inputTokens)) · out \(ClaudeUsageScanner.formatTokens(t.outputTokens)) · cache write \(ClaudeUsageScanner.formatTokens(t.cacheCreationTokens)) · cache read \(ClaudeUsageScanner.formatTokens(t.cacheReadTokens))"
         }
         return line("5h", usage.last5h) + "\n" + line(l10n["usage_today"], usage.today)
+    }
+}
+
+/// Trailing-hours output-token activity, one 2.5pt bar per hour (right = now).
+private struct UsageSparkline: View {
+    let buckets: [Int]
+
+    var body: some View {
+        let peak = max(buckets.max() ?? 0, 1)
+        HStack(alignment: .bottom, spacing: 1.5) {
+            ForEach(Array(buckets.enumerated()), id: \.offset) { _, value in
+                RoundedRectangle(cornerRadius: 0.75)
+                    .fill(.white.opacity(value == 0 ? 0.12 : 0.45))
+                    .frame(width: 2.5, height: max(1.5, CGFloat(value) / CGFloat(peak) * 10))
+            }
+        }
+        .frame(height: 10, alignment: .bottom)
     }
 }
 

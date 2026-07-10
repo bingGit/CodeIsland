@@ -25,14 +25,21 @@ public struct ClaudeUsageTotals: Equatable, Sendable {
 /// Every assistant line carries `message.usage`; `message.id` repeats across
 /// tool-use continuation lines of the same API response, so totals dedupe on it.
 public enum ClaudeUsageScanner {
+    /// Sparkline resolution: one bucket per hour, oldest first.
+    public static let sparklineHours = 12
+
     public struct Snapshot: Equatable, Sendable {
         public let last5h: ClaudeUsageTotals
         public let today: ClaudeUsageTotals
+        /// Output tokens per hour for the trailing `sparklineHours` hours,
+        /// index 0 oldest, last index = the current hour.
+        public let hourlyOutputTokens: [Int]
         public let scannedAt: Date
 
-        public init(last5h: ClaudeUsageTotals, today: ClaudeUsageTotals, scannedAt: Date) {
+        public init(last5h: ClaudeUsageTotals, today: ClaudeUsageTotals, hourlyOutputTokens: [Int], scannedAt: Date) {
             self.last5h = last5h
             self.today = today
+            self.hourlyOutputTokens = hourlyOutputTokens
             self.scannedAt = scannedAt
         }
     }
@@ -43,10 +50,12 @@ public enum ClaudeUsageScanner {
     ) -> Snapshot {
         let fiveHoursAgo = now.addingTimeInterval(-5 * 3600)
         let midnight = Calendar.current.startOfDay(for: now)
-        let cutoff = min(fiveHoursAgo, midnight)
+        let sparklineStart = now.addingTimeInterval(-Double(sparklineHours) * 3600)
+        let cutoff = min(fiveHoursAgo, midnight, sparklineStart)
 
         var last5h = ClaudeUsageTotals()
         var today = ClaudeUsageTotals()
+        var hourly = [Int](repeating: 0, count: sparklineHours)
         var seenMessageIds = Set<String>()
 
         let fm = FileManager.default
@@ -70,10 +79,14 @@ public enum ClaudeUsageScanner {
                     seenMessageIds.insert(parsed.messageId)
                     if parsed.timestamp >= fiveHoursAgo { last5h.add(parsed.usage) }
                     if parsed.timestamp >= midnight { today.add(parsed.usage) }
+                    let hoursAgo = Int(now.timeIntervalSince(parsed.timestamp) / 3600)
+                    if hoursAgo >= 0 && hoursAgo < sparklineHours {
+                        hourly[sparklineHours - 1 - hoursAgo] += parsed.usage.outputTokens
+                    }
                 }
             }
         }
-        return Snapshot(last5h: last5h, today: today, scannedAt: now)
+        return Snapshot(last5h: last5h, today: today, hourlyOutputTokens: hourly, scannedAt: now)
     }
 
     /// Parse one transcript line into (timestamp, message id, usage) — nil for
