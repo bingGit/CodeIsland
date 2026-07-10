@@ -1725,6 +1725,7 @@ private struct SessionListView: View {
                 ("pi", "Pi"),
                 ("kiro", "Kiro"),
                 ("cline", "Cline"),
+                ("zcode", "ZCode"),
             ]
             var result: [(String, String?, [String])] = []
             var seen = Set<String>()
