@@ -1091,7 +1091,8 @@ private func applyEnvMetadata(into sessions: inout [String: SessionSnapshot], se
 }
 
 public func extractMetadata(into sessions: inout [String: SessionSnapshot], sessionId: String, event: HookEvent) {
-    if let cwd = event.rawJSON["cwd"] as? String, !cwd.isEmpty,
+    let eventCwd = event.rawJSON["cwd"] as? String
+    if let cwd = eventCwd, !cwd.isEmpty,
        !SessionSnapshot.isUnhelpfulHookCwd(cwd) {
         sessions[sessionId]?.cwd = cwd
     }
@@ -1102,14 +1103,22 @@ public func extractMetadata(into sessions: inout [String: SessionSnapshot], sess
         sessions[sessionId]?.cwd = first
     } else if sessions[sessionId]?.cwd == nil
         || SessionSnapshot.isUnhelpfulHookCwd(sessions[sessionId]?.cwd ?? ""),
-              let tp = event.rawJSON["transcript_path"] as? String, !tp.isEmpty {
+              let tp = event.rawJSON["transcript_path"] as? String,
+              tp.contains("/.cursor/projects/") {
         // Cursor: extract project dir from transcript_path
         // e.g. ~/.cursor/projects/<project>/agent-transcripts/... → ~/.cursor/projects/<project>
+        // Must stay Cursor-scoped: Claude transcripts also contain a "projects"
+        // component (~/.claude/projects/<encoded>/…) that is not a workspace.
         let parts = tp.split(separator: "/")
         if let idx = parts.firstIndex(of: "projects"), idx + 1 < parts.count {
             let projectName = String(parts[idx + 1])
             sessions[sessionId]?.cwd = "/\(parts[...idx].joined(separator: "/"))/\(projectName)"
         }
+    } else if sessions[sessionId]?.cwd == nil, let cwd = eventCwd, !cwd.isEmpty {
+        // Last resort: an unhelpful cwd ($HOME, ~/.claude) still beats nil —
+        // transcript-based model lookup keys off it, and the display layer
+        // already renders these paths as "Session".
+        sessions[sessionId]?.cwd = cwd
     }
     if let model = event.rawJSON["model"] as? String, !model.isEmpty {
         sessions[sessionId]?.model = model

@@ -225,6 +225,41 @@ final class DerivedSessionStateTests: XCTestCase {
         XCTAssertEqual(sessions["s1"]?.cwd, workspace)
     }
 
+    /// A Claude transcript path also contains a "projects" component
+    /// (~/.claude/projects/<encoded>/…) — it must not hijack cwd. The home
+    /// cwd itself is kept as a last resort so model lookup keeps working.
+    func testExtractMetadataKeepsHomeCwdForClaudeTranscripts() throws {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        var sessions: [String: SessionSnapshot] = ["s1": SessionSnapshot()]
+        let event = try decode([
+            "hook_event_name": "PreToolUse",
+            "session_id": "s1",
+            "_source": "claude",
+            "cwd": home,
+            "transcript_path": "\(home)/.claude/projects/-Users-someone/abc123.jsonl",
+        ])
+
+        extractMetadata(into: &sessions, sessionId: "s1", event: event)
+
+        XCTAssertEqual(sessions["s1"]?.cwd, home)
+    }
+
+    func testExtractMetadataStillDecodesCursorTranscriptPath() throws {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        var sessions: [String: SessionSnapshot] = ["s1": SessionSnapshot()]
+        let event = try decode([
+            "hook_event_name": "PreToolUse",
+            "session_id": "s1",
+            "_source": "cursor-cli",
+            "cwd": "\(home)/.claude",
+            "transcript_path": "\(home)/.cursor/projects/enc-proj/agent-transcripts/t.jsonl",
+        ])
+
+        extractMetadata(into: &sessions, sessionId: "s1", event: event)
+
+        XCTAssertEqual(sessions["s1"]?.cwd, "\(home)/.cursor/projects/enc-proj")
+    }
+
     private func decode(_ payload: [String: Any]) throws -> HookEvent {
         let data = try JSONSerialization.data(withJSONObject: payload)
         guard let event = HookEvent(from: data) else {
