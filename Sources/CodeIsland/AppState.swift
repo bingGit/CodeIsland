@@ -2164,6 +2164,11 @@ final class AppState {
             snapshot.zellijSessionName = p.zellijSessionName
             snapshot.weztermPaneId = p.weztermPaneId
             snapshot.lastActivity = p.lastActivity
+            // Branch is re-read, not persisted — it may have changed between runs.
+            if let cwd = p.cwd, let info = GitBranchReader.read(cwd: cwd) {
+                snapshot.gitBranch = info.branch
+                snapshot.gitIsWorktree = info.isWorktree
+            }
             // Restore persisted cliPid only if the process is still alive — avoids
             // stale sessions reappearing briefly after the app or IDE restarts (#46).
             if let pid = p.cliPid, pid > 0 {
