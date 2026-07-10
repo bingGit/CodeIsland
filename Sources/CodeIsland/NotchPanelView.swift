@@ -2828,6 +2828,10 @@ private let cliIconFiles: [String: String] = [
     "omp": "pi",
     "opencode": "opencode",
     "cline": "cline",
+    // Rendered from the in-house pixel mascots via
+    // MascotRenderHarness/testRenderCliIcons (MASCOT_ICON_DIR=…).
+    "kiro": "kiro",
+    "openclaw": "openclaw",
 ]
 
 private var cliIconCache: [String: NSImage] = [:]
@@ -2838,9 +2842,45 @@ func cliIcon(source: String, size: CGFloat = 16) -> NSImage? {
     guard let filename = cliIconFiles[source],
           let url = Bundle.appModule.url(forResource: filename, withExtension: "png", subdirectory: "Resources/cli-icons"),
           let image = NSImage(contentsOf: url)
-    else { return nil }
+    else {
+        // No asset (new integrations, custom CLIs): draw a monogram tile so
+        // every row in the settings CLI list still gets an icon.
+        let fallback = monogramIcon(for: source, size: size)
+        cliIconCache[key] = fallback
+        return fallback
+    }
     image.size = NSSize(width: size, height: size)
     cliIconCache[key] = image
+    return image
+}
+
+/// Rounded tile with the source's first letter; hue derived from the source
+/// name so distinct CLIs get stable, distinct colors.
+private func monogramIcon(for source: String, size: CGFloat) -> NSImage {
+    let letter = String(source.trimmingCharacters(in: CharacterSet(charactersIn: ".")).prefix(1)).uppercased()
+    // Deterministic hash — Swift's hashValue is seeded per launch and would
+    // repaint the tile a different color every run.
+    let stableHash = source.unicodeScalars.reduce(0) { ($0 &* 31 &+ Int($1.value)) & 0x7FFF_FFFF }
+    let hue = Double(stableHash % 360) / 360.0
+    let scale: CGFloat = 4  // draw at 4x so small sizes stay crisp
+    let px = size * scale
+    let image = NSImage(size: NSSize(width: px, height: px), flipped: false) { rect in
+        let bg = NSColor(hue: hue, saturation: 0.55, brightness: 0.72, alpha: 1)
+        NSBezierPath(roundedRect: rect.insetBy(dx: px * 0.02, dy: px * 0.02),
+                     xRadius: px * 0.22, yRadius: px * 0.22).addClip()
+        bg.setFill()
+        rect.fill()
+        let font = NSFont.systemFont(ofSize: px * 0.58, weight: .bold)
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: NSColor.white,
+        ]
+        let text = NSAttributedString(string: letter, attributes: attrs)
+        let textSize = text.size()
+        text.draw(at: NSPoint(x: (px - textSize.width) / 2, y: (px - textSize.height) / 2))
+        return true
+    }
+    image.size = NSSize(width: size, height: size)
     return image
 }
 
