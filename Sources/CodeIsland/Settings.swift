@@ -65,6 +65,9 @@ enum SettingsKey {
     // Session cards
     static let showGitBranch = "showGitBranch"
 
+    // Token-usage footer (local Claude transcript aggregation)
+    static let showUsageStats = "showUsageStats"
+
     // Completion notification: "expand" | "glance" | "off". Successor of the
     // boolean autoExpandOnCompletion — see AppState.completionStyle migration.
     static let completionNotificationStyle = "completionNotificationStyle"
@@ -158,6 +161,7 @@ struct SettingsDefaults {
     static let quietHoursStart = 22 * 60
     static let quietHoursEnd = 8 * 60
     static let showGitBranch = true
+    static let showUsageStats = true
 
     static let rotationInterval = 5
 
@@ -237,6 +241,7 @@ class SettingsManager {
             SettingsKey.quietHoursStart: SettingsDefaults.quietHoursStart,
             SettingsKey.quietHoursEnd: SettingsDefaults.quietHoursEnd,
             SettingsKey.showGitBranch: SettingsDefaults.showGitBranch,
+            SettingsKey.showUsageStats: SettingsDefaults.showUsageStats,
             SettingsKey.rotationInterval: SettingsDefaults.rotationInterval,
             SettingsKey.maxToolHistory: SettingsDefaults.maxToolHistory,
             SettingsKey.mascotSpeed: SettingsDefaults.mascotSpeed,

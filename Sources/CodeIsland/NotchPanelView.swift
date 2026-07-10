@@ -1679,6 +1679,7 @@ private struct SessionListView: View {
     var onlySessionId: String? = nil
     @AppStorage(SettingsKey.sessionGroupingMode) private var groupingMode = SettingsDefaults.sessionGroupingMode
     @AppStorage(SettingsKey.maxVisibleSessions) private var maxVisibleSessions = SettingsDefaults.maxVisibleSessions
+    @AppStorage(SettingsKey.showUsageStats) private var showUsageStats = SettingsDefaults.showUsageStats
 
     private var groupedSessions: [(header: String, source: String?, ids: [String])] {
         if let only = onlySessionId, appState.sessions[only] != nil {
@@ -1812,20 +1813,64 @@ private struct SessionListView: View {
         }
         .padding(.vertical, 4)
 
-        if needsScroll {
-            ThinScrollView(maxHeight: CGFloat(maxVisibleSessions) * 90) {
+        VStack(spacing: 0) {
+            if needsScroll {
+                ThinScrollView(maxHeight: CGFloat(maxVisibleSessions) * 90) {
+                    content
+                }
+                .clipShape(
+                    UnevenRoundedRectangle(
+                        topLeadingRadius: 0, bottomLeadingRadius: 20,
+                        bottomTrailingRadius: 20, topTrailingRadius: 0,
+                        style: .continuous
+                    )
+                )
+            } else {
                 content
             }
-            .clipShape(
-                UnevenRoundedRectangle(
-                    topLeadingRadius: 0, bottomLeadingRadius: 20,
-                    bottomTrailingRadius: 20, topTrailingRadius: 0,
-                    style: .continuous
-                )
-            )
-        } else {
-            content
+
+            if showUsageStats, let usage = appState.claudeUsage,
+               !(usage.last5h.isEmpty && usage.today.isEmpty) {
+                UsageFooterLine(usage: usage)
+            }
         }
+    }
+}
+
+/// Token totals from the local Claude transcripts — "in" is billed input
+/// (input + cache writes); cache reads live in the tooltip.
+private struct UsageFooterLine: View {
+    let usage: ClaudeUsageScanner.Snapshot
+    @ObservedObject private var l10n = L10n.shared
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "gauge.with.needle")
+                .font(.system(size: 9, weight: .semibold))
+            Text("Claude")
+                .fontWeight(.semibold)
+            Text("5h \(compact(usage.last5h))")
+            Text("·")
+                .foregroundStyle(.white.opacity(0.25))
+            Text("\(l10n["usage_today"]) \(compact(usage.today))")
+            Spacer()
+        }
+        .font(.system(size: 10, weight: .medium, design: .monospaced))
+        .foregroundStyle(.white.opacity(0.45))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 5)
+        .help(detail)
+    }
+
+    private func compact(_ t: ClaudeUsageTotals) -> String {
+        "\(ClaudeUsageScanner.formatTokens(t.inputTokens + t.cacheCreationTokens))↑ \(ClaudeUsageScanner.formatTokens(t.outputTokens))↓"
+    }
+
+    private var detail: String {
+        func line(_ label: String, _ t: ClaudeUsageTotals) -> String {
+            "\(label): in \(ClaudeUsageScanner.formatTokens(t.inputTokens)) · out \(ClaudeUsageScanner.formatTokens(t.outputTokens)) · cache write \(ClaudeUsageScanner.formatTokens(t.cacheCreationTokens)) · cache read \(ClaudeUsageScanner.formatTokens(t.cacheReadTokens))"
+        }
+        return line("5h", usage.last5h) + "\n" + line(l10n["usage_today"], usage.today)
     }
 }
 

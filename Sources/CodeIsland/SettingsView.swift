@@ -829,6 +829,7 @@ private struct AppearancePage: View {
     @AppStorage(SettingsKey.showAgentDetails) private var showAgentDetails = SettingsDefaults.showAgentDetails
     @AppStorage(SettingsKey.showToolStatus) private var showToolStatus = SettingsDefaults.showToolStatus
     @AppStorage(SettingsKey.showGitBranch) private var showGitBranch = SettingsDefaults.showGitBranch
+    @AppStorage(SettingsKey.showUsageStats) private var showUsageStats = SettingsDefaults.showUsageStats
     @AppStorage(SettingsKey.collapsedWidthScale) private var collapsedWidthScale = SettingsDefaults.collapsedWidthScale
     @AppStorage(SettingsKey.notchHeightMode) private var notchHeightModeRaw = SettingsDefaults.notchHeightMode
     @AppStorage(SettingsKey.customNotchHeight) private var customNotchHeight = SettingsDefaults.customNotchHeight
@@ -919,6 +920,12 @@ private struct AppearancePage: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Toggle(l10n["show_git_branch"], isOn: $showGitBranch)
                     Text(l10n["show_git_branch_desc"])
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Toggle(l10n["show_usage_stats"], isOn: $showUsageStats)
+                    Text(l10n["show_usage_stats_desc"])
                         .font(.system(size: 11))
                         .foregroundStyle(.tertiary)
                 }

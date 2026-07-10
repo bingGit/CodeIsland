@@ -185,6 +185,9 @@ final class L10n: ObservableObject {
         "show_tool_status": "Detailed Tool Activity in Compact Bar",
         "show_git_branch": "Show Git branch",
         "show_git_branch_desc": "Show the checked-out branch next to the project name. Linked worktrees get a ⧉ marker.",
+        "usage_today": "Today",
+        "show_usage_stats": "Show Claude token usage",
+        "show_usage_stats_desc": "Footer line aggregating token usage from the local Claude Code transcripts (5-hour window and today). Local files only — no network calls.",
 
         // Mascots
         "preview_status": "Preview Status",
@@ -522,6 +525,9 @@ final class L10n: ObservableObject {
         "show_tool_status": "Detaillierte Tool-Aktivität in der kompakten Leiste",
         "show_git_branch": "Git-Branch anzeigen",
         "show_git_branch_desc": "Zeigt den ausgecheckten Branch neben dem Projektnamen. Verknüpfte Worktrees erhalten eine ⧉-Markierung.",
+        "usage_today": "Heute",
+        "show_usage_stats": "Claude-Token-Nutzung anzeigen",
+        "show_usage_stats_desc": "Fußzeile mit Token-Nutzung aus den lokalen Claude-Code-Transkripten (5-Stunden-Fenster und heute). Nur lokale Dateien — keine Netzwerkzugriffe.",
 
         // Mascots
         "preview_status": "Statusvorschau",
@@ -859,6 +865,9 @@ final class L10n: ObservableObject {
         "show_tool_status": "紧凑栏显示工具调用详情",
         "show_git_branch": "显示 Git 分支",
         "show_git_branch_desc": "在项目名旁显示当前检出的分支，linked worktree 会附加 ⧉ 标记。",
+        "usage_today": "今日",
+        "show_usage_stats": "显示 Claude 用量统计",
+        "show_usage_stats_desc": "在会话列表底部显示从本地 Claude Code 记录聚合的 token 用量（5 小时窗口与今日）。只读本地文件，不发起任何网络请求。",
 
         // Mascots
         "preview_status": "预览状态",
@@ -1196,6 +1205,9 @@ final class L10n: ObservableObject {
         "show_tool_status": "精簡列顯示工具呼叫詳情",
         "show_git_branch": "顯示 Git 分支",
         "show_git_branch_desc": "在專案名稱旁顯示目前簽出的分支，linked worktree 會附加 ⧉ 標記。",
+        "usage_today": "今日",
+        "show_usage_stats": "顯示 Claude 用量統計",
+        "show_usage_stats_desc": "在會話列表底部顯示從本地 Claude Code 記錄彙總的 token 用量（5 小時視窗與今日）。僅讀取本地檔案，不發起任何網路請求。",
 
         // Mascots
         "preview_status": "預覽狀態",
@@ -1533,6 +1545,9 @@ final class L10n: ObservableObject {
         "show_tool_status": "コンパクトバーに詳細なツール活動を表示",
         "show_git_branch": "Gitブランチを表示",
         "show_git_branch_desc": "プロジェクト名の横にチェックアウト中のブランチを表示します。リンクされた worktree には ⧉ マークが付きます。",
+        "usage_today": "今日",
+        "show_usage_stats": "Claudeトークン使用量を表示",
+        "show_usage_stats_desc": "ローカルの Claude Code トランスクリプトから集計したトークン使用量（5時間ウィンドウと今日）をセッション一覧の下部に表示します。ローカルファイルのみ読み取り、ネットワーク通信は行いません。",
 
         // Mascots
         "preview_status": "プレビュー状態",
@@ -1870,6 +1885,9 @@ final class L10n: ObservableObject {
         "show_tool_status": "압축 막대에 자세한 도구 활동 표시",
         "show_git_branch": "Git 브랜치 표시",
         "show_git_branch_desc": "프로젝트 이름 옆에 체크아웃된 브랜치를 표시합니다. 연결된 worktree에는 ⧉ 표시가 붙습니다.",
+        "usage_today": "오늘",
+        "show_usage_stats": "Claude 토큰 사용량 표시",
+        "show_usage_stats_desc": "로컬 Claude Code 기록에서 집계한 토큰 사용량(5시간 창과 오늘)을 세션 목록 하단에 표시합니다. 로컬 파일만 읽으며 네트워크 요청은 없습니다.",
 
         // Mascots
         "preview_status": "미리보기 상태",
@@ -2207,6 +2225,9 @@ final class L10n: ObservableObject {
         "show_tool_status": "Kompakt Çubukta Ayrıntılı Araç Aktivitesi",
         "show_git_branch": "Git dalını göster",
         "show_git_branch_desc": "Proje adının yanında çıkış yapılmış dalı gösterir. Bağlı worktree'ler ⧉ işareti alır.",
+        "usage_today": "Bugün",
+        "show_usage_stats": "Claude jeton kullanımını göster",
+        "show_usage_stats_desc": "Yerel Claude Code dökümlerinden toplanan jeton kullanımını (5 saatlik pencere ve bugün) oturum listesinin altında gösterir. Yalnızca yerel dosyalar okunur — ağ isteği yapılmaz.",
 
         // Mascots
         "preview_status": "Durumu Önizleme",

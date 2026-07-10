@@ -111,8 +111,16 @@ final class AppState {
                 glanceDismissTask?.cancel()
                 glanceCompletionActive = false
             }
+            if surface.isExpanded {
+                refreshClaudeUsageIfStale()
+            }
         }
     }
+
+    /// Local-transcript token usage shown in the session-list footer.
+    /// Refreshed lazily on panel expansion (no resident timer, no API calls).
+    var claudeUsage: ClaudeUsageScanner.Snapshot?
+    private var usageScanInFlight = false
 
     /// Glance completion mode: an agent finished while the pill was collapsed —
     /// light the dot instead of expanding. Cleared when the user expands the
@@ -818,6 +826,20 @@ final class AppState {
         } else {
             // Show immediately
             showCompletion(sessionId)
+        }
+    }
+
+    private func refreshClaudeUsageIfStale() {
+        guard UserDefaults.standard.bool(forKey: SettingsKey.showUsageStats) else { return }
+        guard !usageScanInFlight else { return }
+        if let scannedAt = claudeUsage?.scannedAt, Date().timeIntervalSince(scannedAt) < 120 { return }
+        usageScanInFlight = true
+        Task.detached(priority: .utility) {
+            let snapshot = ClaudeUsageScanner.scan()
+            await MainActor.run { [weak self] in
+                self?.claudeUsage = snapshot
+                self?.usageScanInFlight = false
+            }
         }
     }
 
