@@ -2132,7 +2132,12 @@ struct ConfigInstaller {
             events[event] = entries
         }
 
-        hooksRoot["enabled"] = true
+        // `enabled` is the user's master switch over ALL their hooks — never
+        // flip an explicit false (that would silently re-arm every third-party
+        // hook command they turned off). Our hooks stay dormant in that case.
+        if hooksRoot["enabled"] == nil {
+            hooksRoot["enabled"] = true
+        }
         hooksRoot["events"] = events
 
         return JSONMinimalEditor.setTopLevelValue(in: baseText, key: "hooks", value: hooksRoot) ?? contents

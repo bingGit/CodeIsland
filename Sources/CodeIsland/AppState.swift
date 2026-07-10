@@ -121,6 +121,9 @@ final class AppState {
     /// Refreshed lazily on panel expansion (no resident timer, no API calls).
     var claudeUsage: ClaudeUsageScanner.Snapshot?
     private var usageScanInFlight = false
+    /// Incremental parse state — round-trips through each detached scan so
+    /// growing transcripts are only read past their last consumed offset.
+    private var usageFileCache = ClaudeUsageScanner.FileCache()
 
     /// Glance completion mode: an agent finished while the pill was collapsed —
     /// light the dot instead of expanding. Cleared when the user expands the
@@ -836,11 +839,40 @@ final class AppState {
         guard !usageScanInFlight else { return }
         if let scannedAt = claudeUsage?.scannedAt, Date().timeIntervalSince(scannedAt) < 120 { return }
         usageScanInFlight = true
+        let cacheCopy = usageFileCache
         Task.detached(priority: .utility) {
-            let snapshot = ClaudeUsageScanner.scan()
+            var cache = cacheCopy
+            let snapshot = ClaudeUsageScanner.scan(cache: &cache)
             await MainActor.run { [weak self] in
                 self?.claudeUsage = snapshot
+                self?.usageFileCache = cache
                 self?.usageScanInFlight = false
+            }
+        }
+    }
+
+    /// Last unresolved-branch probe per session — keeps `gitBranch == nil`
+    /// (non-repo cwds, SessionStart snapshot rebuilds) from probing on every event.
+    private var gitBranchCheckedAt: [String: Date] = [:]
+
+    /// Branch resolution runs detached: .git probing on a dead network mount
+    /// must never beachball the main actor. Triggers on cwd changes, at Stop
+    /// (the turn may have switched branches), and while unresolved (throttled).
+    private func maybeRefreshGitBranch(for sessionId: String, cwdBefore: String?, normalizedEventName: String) {
+        guard let session = sessions[sessionId],
+              session.remoteHostId == nil,
+              let cwd = session.cwd else { return }
+        let unresolvedDue = session.gitBranch == nil
+            && Date().timeIntervalSince(gitBranchCheckedAt[sessionId] ?? .distantPast) > 60
+        guard cwd != cwdBefore || normalizedEventName == "Stop" || unresolvedDue else { return }
+        gitBranchCheckedAt[sessionId] = Date()
+        Task.detached(priority: .utility) {
+            let info = GitBranchReader.read(cwd: cwd)
+            await MainActor.run { [weak self] in
+                guard let self, var s = self.sessions[sessionId], s.cwd == cwd else { return }
+                s.gitBranch = info?.branch
+                s.gitIsWorktree = info?.isWorktree ?? false
+                self.sessions[sessionId] = s
             }
         }
     }
@@ -1055,6 +1087,7 @@ final class AppState {
         let normalizedEventName = EventNormalizer.normalize(event.eventName)
         let prevStatus = sessions[sessionId]?.status
         let wasWaiting = prevStatus == .waitingApproval || prevStatus == .waitingQuestion
+        let cwdBeforeReduce = sessions[sessionId]?.cwd
 
         // Cache PreToolUse payloads so downstream events sharing tool_use_id can be
         // correlated, and drain queue entries whose agent already moved on.
@@ -1066,6 +1099,10 @@ final class AppState {
         resolveOrphanPermissionsOnActivity(event)
 
         let effects = reduceEvent(sessions: &sessions, event: event, maxHistory: maxHistory)
+
+        // After reduce: remoteHostId is authoritative (extractMetadata just ran),
+        // so a remote session can never probe the local filesystem here.
+        maybeRefreshGitBranch(for: sessionId, cwdBefore: cwdBeforeReduce, normalizedEventName: normalizedEventName)
 
         // Backfill model after metadata extraction. Hooks are inconsistent across providers,
         // so retry with a cooldown instead of giving up permanently on the first miss.
@@ -2164,11 +2201,6 @@ final class AppState {
             snapshot.zellijSessionName = p.zellijSessionName
             snapshot.weztermPaneId = p.weztermPaneId
             snapshot.lastActivity = p.lastActivity
-            // Branch is re-read, not persisted — it may have changed between runs.
-            if let cwd = p.cwd, let info = GitBranchReader.read(cwd: cwd) {
-                snapshot.gitBranch = info.branch
-                snapshot.gitIsWorktree = info.isWorktree
-            }
             // Restore persisted cliPid only if the process is still alive — avoids
             // stale sessions reappearing briefly after the app or IDE restarts (#46).
             if let pid = p.cliPid, pid > 0 {
@@ -2184,6 +2216,8 @@ final class AppState {
             }
             sessions[p.sessionId] = snapshot
             refreshProviderTitle(for: p.sessionId)
+            // Branch is re-read, not persisted — it may have changed between runs.
+            maybeRefreshGitBranch(for: p.sessionId, cwdBefore: nil, normalizedEventName: "SessionStart")
             // Reattach exit monitoring without changing the restored idle/running snapshot.
             tryMonitorSession(p.sessionId)
         }

@@ -46,6 +46,17 @@ final class SessionSnapshotTitleTests: XCTestCase {
         XCTAssertEqual(snapshot.projectDisplayName, fixtureLeaf)
     }
 
+    func testProjectDisplayNameKeepsLegitimateDotRepos() {
+        var snapshot = SessionSnapshot()
+        snapshot.cwd = "/tmp/code/.dotfiles"
+        XCTAssertEqual(snapshot.projectDisplayName, ".dotfiles")
+
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        snapshot.cwd = "\(home)/.config"
+        XCTAssertEqual(snapshot.projectDisplayName, ".config")
+        XCTAssertFalse(SessionSnapshot.isUnhelpfulHookCwd("\(home)/.config"))
+    }
+
     func testProjectDisplayNameDoesNotUseHomeUsernameForGlobalClaudeDir() {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         var snapshot = SessionSnapshot()

@@ -78,6 +78,63 @@ final class ClaudeUsageScannerTests: XCTestCase {
         XCTAssertEqual(snap.hourlyOutputTokens.reduce(0, +), 60)
     }
 
+    func testIncrementalScanReadsOnlyAppendedBytes() throws {
+        let now = noon
+        let path = home + "/projects/p1/s.jsonl"
+        try (assistantLine(id: "a", at: now.addingTimeInterval(-3600), input: 100, output: 10) + "\n")
+            .write(toFile: path, atomically: true, encoding: .utf8)
+
+        var cache = ClaudeUsageScanner.FileCache()
+        let first = ClaudeUsageScanner.scan(claudeHome: home, now: now, cache: &cache)
+        XCTAssertEqual(first.last5h.inputTokens, 100)
+        let consumedAfterFirst = try XCTUnwrap(cache.files[path]?.consumedBytes)
+        XCTAssertGreaterThan(consumedAfterFirst, 0)
+
+        // Append a second message; rescan must consume only the new bytes.
+        let handle = try XCTUnwrap(FileHandle(forWritingAtPath: path))
+        handle.seekToEndOfFile()
+        handle.write(Data((assistantLine(id: "b", at: now.addingTimeInterval(-1800), input: 7, output: 3) + "\n").utf8))
+        handle.closeFile()
+
+        let second = ClaudeUsageScanner.scan(claudeHome: home, now: now, cache: &cache)
+        XCTAssertEqual(second.last5h.inputTokens, 107)
+        XCTAssertEqual(second.last5h.messageCount, 2)
+        XCTAssertGreaterThan(try XCTUnwrap(cache.files[path]?.consumedBytes), consumedAfterFirst)
+    }
+
+    func testIncrementalScanIgnoresPartialTrailingLine() throws {
+        let now = noon
+        let path = home + "/projects/p1/s.jsonl"
+        let full = assistantLine(id: "a", at: now.addingTimeInterval(-3600), input: 100, output: 10) + "\n"
+        let partial = "{\"type\":\"assistant\",\"timest"  // writer mid-append
+        try (full + partial).write(toFile: path, atomically: true, encoding: .utf8)
+
+        var cache = ClaudeUsageScanner.FileCache()
+        let snap = ClaudeUsageScanner.scan(claudeHome: home, now: now, cache: &cache)
+        XCTAssertEqual(snap.last5h.messageCount, 1)
+        // Offset stops at the last complete line so the partial line is retried.
+        XCTAssertEqual(cache.files[path]?.consumedBytes, UInt64(full.utf8.count))
+    }
+
+    func testTruncatedFileIsRescannedFromStart() throws {
+        let now = noon
+        let path = home + "/projects/p1/s.jsonl"
+        try (assistantLine(id: "a", at: now.addingTimeInterval(-3600), input: 100, output: 10) + "\n"
+             + assistantLine(id: "b", at: now.addingTimeInterval(-1800), input: 50, output: 5) + "\n")
+            .write(toFile: path, atomically: true, encoding: .utf8)
+
+        var cache = ClaudeUsageScanner.FileCache()
+        _ = ClaudeUsageScanner.scan(claudeHome: home, now: now, cache: &cache)
+
+        // Replace with a shorter file (e.g. transcript rewritten).
+        try (assistantLine(id: "c", at: now.addingTimeInterval(-600), input: 1, output: 2) + "\n")
+            .write(toFile: path, atomically: true, encoding: .utf8)
+
+        let snap = ClaudeUsageScanner.scan(claudeHome: home, now: now, cache: &cache)
+        XCTAssertEqual(snap.last5h.inputTokens, 1)
+        XCTAssertEqual(snap.last5h.messageCount, 1)
+    }
+
     func testScanEmptyHome() {
         let snap = ClaudeUsageScanner.scan(claudeHome: home + "/nonexistent", now: noon)
         XCTAssertTrue(snap.last5h.isEmpty)
@@ -90,5 +147,9 @@ final class ClaudeUsageScannerTests: XCTestCase {
         XCTAssertEqual(ClaudeUsageScanner.formatTokens(1_400_000), "1.4M")
         XCTAssertEqual(ClaudeUsageScanner.formatTokens(2_000_000), "2M")
         XCTAssertEqual(ClaudeUsageScanner.formatTokens(1000), "1K")
+        // Rounding must roll the unit over, never render "1000K"/"1000M".
+        XCTAssertEqual(ClaudeUsageScanner.formatTokens(999_949), "999.9K")
+        XCTAssertEqual(ClaudeUsageScanner.formatTokens(999_950), "1M")
+        XCTAssertEqual(ClaudeUsageScanner.formatTokens(999_950_000), "1B")
     }
 }

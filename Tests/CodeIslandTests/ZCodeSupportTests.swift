@@ -99,6 +99,26 @@ final class ZCodeSupportTests: XCTestCase {
         XCTAssertNil(events["PermissionRequest"])
     }
 
+    func testMergeZcodeHooksNeverFlipsUserDisabledMasterSwitch() throws {
+        // `enabled` is the user's master switch over ALL their hooks — install
+        // must not silently re-arm hook commands the user turned off.
+        let original = """
+        {
+          "hooks": {
+            "enabled": false,
+            "events": {
+              "Stop": [ { "hooks": [ { "type": "command", "command": "echo user-hook" } ] } ]
+            }
+          }
+        }
+        """
+
+        let merged = ConfigInstaller.mergeZcodeHooks(into: original)
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(merged.utf8)) as? [String: Any])
+        let hooks = try XCTUnwrap(root["hooks"] as? [String: Any])
+        XCTAssertEqual(hooks["enabled"] as? Bool, false)
+    }
+
     func testMergeZcodeHooksIsIdempotent() throws {
         let once = ConfigInstaller.mergeZcodeHooks(into: "")
         let twice = ConfigInstaller.mergeZcodeHooks(into: once)

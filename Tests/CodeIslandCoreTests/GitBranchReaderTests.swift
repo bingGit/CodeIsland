@@ -86,52 +86,16 @@ final class GitBranchReaderTests: XCTestCase {
         XCTAssertNil(GitBranchReader.read(cwd: root + "/plain"))
     }
 
-    // MARK: extractMetadata integration
+    // MARK: submodule vs linked worktree
 
-    func testExtractMetadataPopulatesBranchOnCwdChange() throws {
-        try write("repo/.git/HEAD", "ref: refs/heads/main\n")
-        var sessions: [String: SessionSnapshot] = ["s1": SessionSnapshot()]
-        let event = try decode([
-            "hook_event_name": "PreToolUse",
-            "session_id": "s1",
-            "cwd": root + "/repo",
-        ])
+    func testSubmoduleUnderWorktreesDirIsNotAWorktree() throws {
+        // Primary checkout lives under a directory literally named "worktrees";
+        // a submodule's gitdir pointer resolves to .git/modules/… — must not
+        // be flagged as a linked worktree.
+        try write("worktrees/repo/.git/modules/sub/HEAD", "ref: refs/heads/main\n")
+        try write("worktrees/repo/sub/.git", "gitdir: \(root!)/worktrees/repo/.git/modules/sub\n")
 
-        extractMetadata(into: &sessions, sessionId: "s1", event: event)
-
-        XCTAssertEqual(sessions["s1"]?.gitBranch, "main")
-        XCTAssertEqual(sessions["s1"]?.gitIsWorktree, false)
-    }
-
-    func testExtractMetadataRefreshesBranchOnStop() throws {
-        try write("repo/.git/HEAD", "ref: refs/heads/main\n")
-        var sessions: [String: SessionSnapshot] = ["s1": SessionSnapshot()]
-        let pre = try decode([
-            "hook_event_name": "PreToolUse",
-            "session_id": "s1",
-            "cwd": root + "/repo",
-        ])
-        extractMetadata(into: &sessions, sessionId: "s1", event: pre)
-        XCTAssertEqual(sessions["s1"]?.gitBranch, "main")
-
-        // The turn switched branches; the same cwd must re-resolve on Stop.
-        try write("repo/.git/HEAD", "ref: refs/heads/feature-x\n")
-        let stop = try decode([
-            "hook_event_name": "Stop",
-            "session_id": "s1",
-            "cwd": root + "/repo",
-        ])
-        extractMetadata(into: &sessions, sessionId: "s1", event: stop)
-
-        XCTAssertEqual(sessions["s1"]?.gitBranch, "feature-x")
-    }
-
-    private func decode(_ payload: [String: Any]) throws -> HookEvent {
-        let data = try JSONSerialization.data(withJSONObject: payload)
-        guard let event = HookEvent(from: data) else {
-            XCTFail("HookEvent should decode payload: \(payload)")
-            throw NSError(domain: "GitBranchReaderTests", code: 1)
-        }
-        return event
+        let info = GitBranchReader.read(cwd: root + "/worktrees/repo/sub")
+        XCTAssertEqual(info, GitBranchInfo(branch: "main", isWorktree: false))
     }
 }

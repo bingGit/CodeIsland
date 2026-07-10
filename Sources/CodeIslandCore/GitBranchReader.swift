@@ -31,9 +31,11 @@ public enum GitBranchReader {
                 }
                 guard let pointer = try? String(contentsOfFile: gitPath, encoding: .utf8),
                       let gitDir = parseGitdirPointer(pointer, relativeTo: dir) else { return nil }
-                // Submodules are also gitdir-pointer checkouts (".../modules/...")
-                // but are not linked worktrees.
-                return headInfo(gitDir: gitDir, isWorktree: gitDir.contains("/worktrees/"))
+                // Linked worktrees resolve to <repo>/.git/worktrees/<name>.
+                // Submodules are also gitdir-pointer checkouts but resolve to
+                // .git/modules/… — and a repo merely *located under* a
+                // directory named "worktrees" must not match either.
+                return headInfo(gitDir: gitDir, isWorktree: gitDir.contains("/.git/worktrees/"))
             }
             let parent = (dir as NSString).deletingLastPathComponent
             if parent == dir || parent.isEmpty { return nil }

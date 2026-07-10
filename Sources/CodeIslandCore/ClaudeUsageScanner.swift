@@ -44,9 +44,39 @@ public enum ClaudeUsageScanner {
         }
     }
 
+    /// Per-file incremental parse state. Transcripts are append-only, so each
+    /// rescan reads only the bytes past `consumedBytes` — a day-long multi-MB
+    /// transcript is never re-read in full. Value semantics: the caller owns a
+    /// copy, hands it to the background scan, and stores the returned state.
+    public struct FileCache: Sendable {
+        struct CachedMessage: Sendable, Equatable {
+            let timestamp: Date
+            let usage: ClaudeUsageTotals
+        }
+        struct FileEntry: Sendable {
+            var consumedBytes: UInt64 = 0
+            var entries: [CachedMessage] = []
+            // Dedupe is per file: an assistant message's continuation lines
+            // repeat its id within the same transcript; ids never straddle files.
+            var seenIds: Set<String> = []
+        }
+        var files: [String: FileEntry] = [:]
+        public init() {}
+    }
+
+    /// One-shot convenience (tests, callers without persistent state).
     public static func scan(
         claudeHome: String = NSHomeDirectory() + "/.claude",
         now: Date = Date()
+    ) -> Snapshot {
+        var cache = FileCache()
+        return scan(claudeHome: claudeHome, now: now, cache: &cache)
+    }
+
+    public static func scan(
+        claudeHome: String = NSHomeDirectory() + "/.claude",
+        now: Date = Date(),
+        cache: inout FileCache
     ) -> Snapshot {
         let fiveHoursAgo = now.addingTimeInterval(-5 * 3600)
         let midnight = Calendar.current.startOfDay(for: now)
@@ -56,7 +86,7 @@ public enum ClaudeUsageScanner {
         var last5h = ClaudeUsageTotals()
         var today = ClaudeUsageTotals()
         var hourly = [Int](repeating: 0, count: sparklineHours)
-        var seenMessageIds = Set<String>()
+        var activeFiles = Set<String>()
 
         let fm = FileManager.default
         let projectsDir = claudeHome + "/projects"
@@ -70,23 +100,53 @@ public enum ClaudeUsageScanner {
                 guard let attrs = try? fm.attributesOfItem(atPath: path),
                       let mtime = attrs[.modificationDate] as? Date,
                       mtime >= cutoff else { continue }
-                guard let contents = try? String(contentsOfFile: path, encoding: .utf8) else { continue }
+                activeFiles.insert(path)
+                let size = (attrs[.size] as? NSNumber)?.uint64Value ?? 0
 
-                for line in contents.split(separator: "\n") {
-                    guard let parsed = parseAssistantUsage(String(line)),
-                          parsed.timestamp >= cutoff, parsed.timestamp <= now,
-                          !seenMessageIds.contains(parsed.messageId) else { continue }
-                    seenMessageIds.insert(parsed.messageId)
-                    if parsed.timestamp >= fiveHoursAgo { last5h.add(parsed.usage) }
-                    if parsed.timestamp >= midnight { today.add(parsed.usage) }
-                    let hoursAgo = Int(now.timeIntervalSince(parsed.timestamp) / 3600)
+                var entry = cache.files[path] ?? FileCache.FileEntry()
+                if size < entry.consumedBytes {
+                    // Truncated or replaced — start over.
+                    entry = FileCache.FileEntry()
+                }
+                if size > entry.consumedBytes {
+                    consumeNewLines(path: path, into: &entry)
+                }
+                entry.entries.removeAll { $0.timestamp < cutoff }
+                cache.files[path] = entry
+
+                for message in entry.entries where message.timestamp <= now {
+                    if message.timestamp >= fiveHoursAgo { last5h.add(message.usage) }
+                    if message.timestamp >= midnight { today.add(message.usage) }
+                    let hoursAgo = Int(now.timeIntervalSince(message.timestamp) / 3600)
                     if hoursAgo >= 0 && hoursAgo < sparklineHours {
-                        hourly[sparklineHours - 1 - hoursAgo] += parsed.usage.outputTokens
+                        hourly[sparklineHours - 1 - hoursAgo] += message.usage.outputTokens
                     }
                 }
             }
         }
+        // Files that fell out of the mtime window carry no in-window entries.
+        cache.files = cache.files.filter { activeFiles.contains($0.key) }
         return Snapshot(last5h: last5h, today: today, hourlyOutputTokens: hourly, scannedAt: now)
+    }
+
+    /// Read bytes past `entry.consumedBytes` and parse the COMPLETE lines only —
+    /// a partial trailing line (writer mid-append) is left for the next scan.
+    private static func consumeNewLines(path: String, into entry: inout FileCache.FileEntry) {
+        guard let handle = FileHandle(forReadingAtPath: path) else { return }
+        defer { handle.closeFile() }
+        handle.seek(toFileOffset: entry.consumedBytes)
+        let data = handle.readDataToEndOfFile()
+        guard let lastNewline = data.lastIndex(of: UInt8(ascii: "\n")) else { return }
+        let consumable = data[data.startIndex...lastNewline]
+        entry.consumedBytes += UInt64(consumable.count)
+        guard let text = String(data: consumable, encoding: .utf8) else { return }
+
+        for line in text.split(separator: "\n") {
+            guard let parsed = parseAssistantUsage(String(line)),
+                  !entry.seenIds.contains(parsed.messageId) else { continue }
+            entry.seenIds.insert(parsed.messageId)
+            entry.entries.append(.init(timestamp: parsed.timestamp, usage: parsed.usage))
+        }
     }
 
     /// Parse one transcript line into (timestamp, message id, usage) — nil for
@@ -124,15 +184,17 @@ public enum ClaudeUsageScanner {
         fractionalFormatter.date(from: raw) ?? plainFormatter.date(from: raw)
     }
 
-    /// Compact human token count: 950, 32.5K, 1.4M.
+    /// Compact human token count: 950, 32.5K, 1.4M. Unit selection uses the
+    /// rounded value so 999,950 rolls over to "1M" instead of "1000K".
     public static func formatTokens(_ count: Int) -> String {
-        switch count {
-        case ..<1000:
-            return "\(count)"
-        case ..<1_000_000:
-            return String(format: "%.1fK", Double(count) / 1000).replacingOccurrences(of: ".0K", with: "K")
-        default:
-            return String(format: "%.1fM", Double(count) / 1_000_000).replacingOccurrences(of: ".0M", with: "M")
+        if count < 1000 { return "\(count)" }
+        func fmt(_ value: Double, _ unit: String) -> String {
+            String(format: "%.1f\(unit)", value).replacingOccurrences(of: ".0\(unit)", with: unit)
         }
+        let thousands = Double(count) / 1000
+        if thousands < 999.95 { return fmt(thousands, "K") }
+        let millions = Double(count) / 1_000_000
+        if millions < 999.95 { return fmt(millions, "M") }
+        return fmt(Double(count) / 1_000_000_000, "B")
     }
 }

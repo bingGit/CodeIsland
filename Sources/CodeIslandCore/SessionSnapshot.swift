@@ -284,13 +284,23 @@ public struct SessionSnapshot: Sendable {
         return Self.resolvedProjectDisplayName(from: cwd)
     }
 
+    /// Directory names that are agent metadata, not user projects. Only these
+    /// exact dot-dirs are peeled / treated as unhelpful — legitimate dot-named
+    /// repos (.dotfiles, .config, .emacs.d) must keep their own name.
+    static let agentMetadataDirNames: Set<String> = [
+        ".claude", ".cursor", ".codex", ".gemini", ".qoder", ".qoderwork",
+        ".trae", ".trae-cn", ".kiro", ".copilot", ".factory", ".codebuddy",
+        ".codybuddycn", ".stepfun", ".workbuddy", ".hermes", ".kimi",
+        ".pi", ".omp", ".qwen", ".zcode", ".openclaw", ".codeisland",
+    ]
+
     /// Resolve a human project folder label from a cwd path.
     static func resolvedProjectDisplayName(from cwd: String) -> String {
         var name = displayNameLeafFromCursorProjectsPath(cwd)
             ?? (cwd as NSString).lastPathComponent
 
         // Agent metadata dirs (.claude, .cursor) are not project names (#248).
-        if name.hasPrefix("."), name.count > 1 {
+        if Self.agentMetadataDirNames.contains(name) {
             if let peeled = peelProjectNameBeforeMetadataDir(in: cwd, leaf: name) {
                 name = peeled
             } else if isUnhelpfulHookCwd(cwd) {
@@ -315,7 +325,21 @@ public struct SessionSnapshot: Sendable {
     /// in the original workspace path become hyphens. Literal hyphens inside a
     /// folder name are preserved, so naive full-path reversal is ambiguous — walk
     /// hyphen segments from the right until the reconstructed path exists.
+    /// Decode results are memoized: displayName is evaluated on every SwiftUI
+    /// render of every session card, and the walk below stats the filesystem.
+    /// NSCache is thread-safe and evicts under memory pressure.
+    private static let cursorLeafCache = NSCache<NSString, NSString>()
+
     static func displayNameLeafFromCursorProjectsPath(_ cwd: String) -> String? {
+        if let cached = cursorLeafCache.object(forKey: cwd as NSString) {
+            return cached.length == 0 ? nil : (cached as String)
+        }
+        let result = computeDisplayNameLeafFromCursorProjectsPath(cwd)
+        cursorLeafCache.setObject((result ?? "") as NSString, forKey: cwd as NSString)
+        return result
+    }
+
+    private static func computeDisplayNameLeafFromCursorProjectsPath(_ cwd: String) -> String? {
         let marker = "/.cursor/projects/"
         guard let range = cwd.range(of: marker) else { return nil }
         let encoded = cwd[range.upperBound...].split(separator: "/").first.map(String.init) ?? ""
@@ -355,7 +379,7 @@ public struct SessionSnapshot: Sendable {
     /// When cwd sits inside a metadata dir, or a Cursor-encoded leaf is one, peel
     /// back to the real project folder name.
     static func peelProjectNameBeforeMetadataDir(in cwd: String, leaf: String) -> String? {
-        guard leaf.hasPrefix(".") else { return nil }
+        guard Self.agentMetadataDirNames.contains(leaf) else { return nil }
 
         if cwd.contains("/.cursor/projects/") {
             let marker = "/.cursor/projects/"
@@ -382,7 +406,7 @@ public struct SessionSnapshot: Sendable {
     static func isUnhelpfulHookCwd(_ cwd: String) -> Bool {
         if isHomeDirectoryPath(cwd) { return true }
         let last = (cwd as NSString).lastPathComponent
-        guard last.hasPrefix("."), last.count > 1 else { return false }
+        guard Self.agentMetadataDirNames.contains(last) else { return false }
         return isHomeDirectoryPath((cwd as NSString).deletingLastPathComponent)
     }
 
@@ -405,7 +429,8 @@ public struct SessionSnapshot: Sendable {
             projectEncoded = encoded
         }
         let parts = projectEncoded.split(separator: "-", omittingEmptySubsequences: false).map(String.init)
-        guard parts.count >= 2, parts.last?.hasPrefix(".") == true else { return nil }
+        guard parts.count >= 2, let last = parts.last,
+              Self.agentMetadataDirNames.contains(last) else { return nil }
         let peeled = parts[parts.count - 2]
         return peeled.isEmpty ? nil : peeled
     }
@@ -1105,7 +1130,6 @@ private func applyEnvMetadata(into sessions: inout [String: SessionSnapshot], se
 }
 
 public func extractMetadata(into sessions: inout [String: SessionSnapshot], sessionId: String, event: HookEvent) {
-    let previousCwd = sessions[sessionId]?.cwd
     let eventCwd = event.rawJSON["cwd"] as? String
     if let cwd = eventCwd, !cwd.isEmpty,
        !SessionSnapshot.isUnhelpfulHookCwd(cwd) {
@@ -1135,15 +1159,9 @@ public func extractMetadata(into sessions: inout [String: SessionSnapshot], sess
         // already renders these paths as "Session".
         sessions[sessionId]?.cwd = cwd
     }
-    // Branch refresh is bounded to cwd changes and end-of-turn: local sessions
-    // only (remote cwds don't exist on this filesystem → stays nil).
-    if sessions[sessionId]?.remoteHostId == nil,
-       let cwd = sessions[sessionId]?.cwd,
-       cwd != previousCwd || EventNormalizer.normalize(event.eventName) == "Stop" {
-        let info = GitBranchReader.read(cwd: cwd)
-        sessions[sessionId]?.gitBranch = info?.branch
-        sessions[sessionId]?.gitIsWorktree = info?.isWorktree ?? false
-    }
+    // Git branch resolution is NOT done here: this reducer runs on the main
+    // actor and .git probing can block on network mounts. AppState refreshes
+    // it asynchronously after reduce (maybeRefreshGitBranch).
     if let model = event.rawJSON["model"] as? String, !model.isEmpty {
         sessions[sessionId]?.model = model
     }
