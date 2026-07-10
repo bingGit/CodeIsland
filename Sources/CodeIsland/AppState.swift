@@ -438,6 +438,7 @@ final class AppState {
         case "hermes":      return path.contains("/hermes.app/contents/")
         // Claude Code Desktop (#211): local Code-tab sessions live inside Claude.app.
         case "claude":      return path.contains("/claude.app/contents/")
+        case "zcode":       return path.contains("/zcode.app/contents/")
         default:           return false
         }
     }
@@ -757,6 +758,7 @@ final class AppState {
         case "kimi":       return findKimiPids(candidatePids: candidatePids)
         case "pi":         return findPiPids(candidatePids: candidatePids)
         case "cline":      return findClinePids(candidatePids: candidatePids)
+        case "zcode":      return findZcodePids(candidatePids: candidatePids)
         default:           return []
         }
     }
@@ -3090,6 +3092,17 @@ final class AppState {
             argSubstrings: [
                 "/.local/bin/hermes",
                 "/.hermes/",
+            ],
+            candidatePids: candidatePids
+        )
+    }
+
+    // Electron app (.dmg distribution) — packaged executable path unverified
+    // on a real machine; best-effort guess pending field report (#245).
+    private nonisolated static func findZcodePids(candidatePids: [pid_t]? = nil) -> [pid_t] {
+        findPids(
+            matchingPathSubstrings: [
+                "/zcode.app/contents/",
             ],
             candidatePids: candidatePids
         )

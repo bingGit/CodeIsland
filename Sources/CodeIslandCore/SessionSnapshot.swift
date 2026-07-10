@@ -37,6 +37,7 @@ public struct SessionSnapshot: Sendable {
         "pi",
         "kiro",
         "cline",
+        "zcode",
     ]
 
     public static let ideCompletionSources: Set<String> = [
@@ -188,6 +189,8 @@ public struct SessionSnapshot: Sendable {
             "omp": "pi",
             "oh-my-pi": "pi",
             "oh my pi": "pi",
+            "z-code": "zcode",
+            "z code": "zcode",
         ]
         let canonical = aliases[normalized] ?? normalized
         let dynamicSupportedSources = supportedSources.union(loadCustomSources())
@@ -491,6 +494,7 @@ public struct SessionSnapshot: Sendable {
         case "pi": return "Pi"
         case "kiro": return "Kiro"
         case "cline": return "Cline"
+        case "zcode": return "ZCode"
         default:
             if let customName = Self.loadCustomSourceNames()[source] {
                 return customName
