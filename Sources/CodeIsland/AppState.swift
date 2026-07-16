@@ -2441,6 +2441,15 @@ final class AppState {
                     sessions[info.sessionId]?.transcriptPath = path
                     didMutate = true
                 }
+                if let status = info.status, sessions[info.sessionId]?.status != status {
+                    sessions[info.sessionId]?.status = status
+                    sessions[info.sessionId]?.lastActivity = info.modifiedAt
+                    didMutate = true
+                }
+                if let bundleId = info.termBundleId, sessions[info.sessionId]?.termBundleId != bundleId {
+                    sessions[info.sessionId]?.termBundleId = bundleId
+                    didMutate = true
+                }
                 attachTranscriptTailerIfNeeded(sessionId: info.sessionId)
                 tryMonitorSession(info.sessionId)
                 refreshProviderTitle(for: info.sessionId, providerSessionId: info.sessionId)
@@ -2506,6 +2515,9 @@ final class AppState {
             session.ttyPath = info.tty
             session.recentMessages = info.recentMessages
             session.source = info.source
+            session.status = info.status ?? .idle
+            session.lastActivity = info.modifiedAt
+            session.termBundleId = info.termBundleId
             if let pid = info.pid, let process = Self.liveProcessIdentity(for: pid) {
                 session.cliPid = process.pid
                 session.cliStartTime = process.startTime
@@ -2819,6 +2831,8 @@ final class AppState {
         let modifiedAt: Date
         let recentMessages: [ChatMessage]
         var source: String = "claude"
+        var status: AgentStatus? = nil
+        var termBundleId: String? = nil
         /// Absolute path to the JSONL transcript this session was discovered from.
         /// When non-nil and the session is still live, AppState registers a JSONLTailer
         /// so incremental assistant appends reach the UI without another full scan.
@@ -4181,8 +4195,6 @@ final class AppState {
     /// Find active Codex sessions by matching running processes to session files
     private nonisolated static func findActiveCodexSessions(candidatePids: [pid_t]? = nil) -> [DiscoveredSession] {
         let codexPids = findCodexPids(candidatePids: candidatePids)
-        guard !codexPids.isEmpty else { return [] }
-
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let fm = FileManager.default
         let sessionsBase = "\(home)/.codex/sessions"
@@ -4237,7 +4249,81 @@ final class AppState {
                 agentNickname: subagentMetadata?.agentNickname
             ))
         }
+        results.append(contentsOf: findActiveCodexDesktopSessions(base: sessionsBase, fm: fm))
         return results
+    }
+
+    /// Desktop threads have no task-specific process CWD to correlate with a
+    /// transcript. Their session metadata is the authoritative discriminator.
+    private nonisolated static func findActiveCodexDesktopSessions(base: String, fm: FileManager) -> [DiscoveredSession] {
+        let calendar = Calendar.current
+        var results: [DiscoveredSession] = []
+
+        for daysBack in 0..<2 {
+            guard let date = calendar.date(byAdding: .day, value: -daysBack, to: Date()) else { continue }
+            let directory = String(format: "\(base)/%04d/%02d/%02d",
+                                   calendar.component(.year, from: date),
+                                   calendar.component(.month, from: date),
+                                   calendar.component(.day, from: date))
+            guard let files = try? fm.contentsOfDirectory(atPath: directory) else { continue }
+
+            for file in files where file.hasSuffix(".jsonl") {
+                let path = "\(directory)/\(file)"
+                guard let attrs = try? fm.attributesOfItem(atPath: path),
+                      let modifiedAt = attrs[.modificationDate] as? Date,
+                      modifiedAt.timeIntervalSinceNow >= -600,
+                      let cwd = codexDesktopTranscriptCwd(path: path)
+                else { continue }
+
+                let sessionId = extractCodexSessionId(from: file)
+                guard !sessionId.isEmpty else { continue }
+                let (model, messages) = readRecentFromCodexTranscript(path: path)
+                results.append(DiscoveredSession(
+                    sessionId: sessionId,
+                    cwd: cwd,
+                    tty: nil,
+                    model: model,
+                    pid: nil,
+                    modifiedAt: modifiedAt,
+                    recentMessages: messages,
+                    source: "codex",
+                    status: codexDesktopTranscriptStatus(path: path),
+                    termBundleId: "com.openai.chat",
+                    transcriptPath: path
+                ))
+            }
+        }
+        return results
+    }
+
+    private nonisolated static func codexDesktopTranscriptCwd(path: String) -> String? {
+        guard let firstLine = readFirstLine(path: path),
+              let data = firstLine.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              json["type"] as? String == "session_meta",
+              let payload = json["payload"] as? [String: Any],
+              payload["originator"] as? String == "Codex Desktop",
+              let cwd = payload["cwd"] as? String,
+              !cwd.isEmpty else { return nil }
+        return cwd
+    }
+
+    private nonisolated static func codexDesktopTranscriptStatus(path: String) -> AgentStatus {
+        guard let text = readTranscriptTail(path: path) else { return .idle }
+        for line in text.split(separator: "\n").reversed() {
+            guard let data = line.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  json["type"] as? String == "event_msg",
+                  let payload = json["payload"] as? [String: Any],
+                  let type = payload["type"] as? String else { continue }
+            switch type {
+            case "task_started", "agent_reasoning", "agent_message": return .running
+            case "user_message": return .processing
+            case "task_complete": return .idle
+            default: continue
+            }
+        }
+        return .idle
     }
 
     nonisolated static func codexSubagentMetadata(inTranscriptPath path: String) -> CodexSubagentMetadata? {
