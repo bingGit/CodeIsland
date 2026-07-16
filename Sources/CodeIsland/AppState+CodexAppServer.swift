@@ -315,6 +315,7 @@ extension AppState {
         guard let thread = params["thread"]?.asObject else { return }
         guard let threadId = thread["id"]?.asString else { return }
         let sessionId = AppState.codexAppSessionPrefix + threadId
+        clearManualSessionDismissal(sessionId)
 
         var snapshot = sessions[sessionId] ?? SessionSnapshot(startTime: Date())
         snapshot.source = "codex"
@@ -343,6 +344,13 @@ extension AppState {
     private func applyCodexThreadStatusNotification(params: [String: AnyCodableLike]) {
         guard let threadId = params["threadId"]?.asString else { return }
         let sessionId = AppState.codexAppSessionPrefix + threadId
+        if clearManualSessionDismissal(sessionId), sessions[sessionId] == nil {
+            var snapshot = SessionSnapshot(startTime: Date())
+            snapshot.source = "codex"
+            snapshot.termBundleId = AppState.codexAppBundleId
+            snapshot.providerSessionId = threadId
+            sessions[sessionId] = snapshot
+        }
         guard var snapshot = sessions[sessionId] else { return }
 
         applyCodexThreadStatus(&snapshot, status: params["status"]?.asObject)

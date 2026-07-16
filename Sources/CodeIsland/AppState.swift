@@ -87,6 +87,8 @@ final class AppState {
     /// reattach when the path actually changes. See AppState+TranscriptTailer.
     @ObservationIgnored
     var attachedTranscriptPaths: [String: String] = [:]
+    @ObservationIgnored
+    private var manuallyDismissedSessionActivity = SessionPersistence.loadDismissedSessions()
     /// Watches active session transcripts for appended assistant lines. Lazily
     /// constructed so the delta handler can safely capture `self`.
     @ObservationIgnored
@@ -641,6 +643,46 @@ final class AppState {
         scheduleSave()
     }
 
+    func canRemoveSessionFromMonitoring(_ sessionId: String) -> Bool {
+        guard sessions[sessionId] != nil else { return false }
+        let hasPermission = permissionQueue.contains { ($0.event.sessionId ?? "default") == sessionId }
+        let hasQuestion = questionQueue.contains { ($0.event.sessionId ?? "default") == sessionId }
+        return !hasPermission && !hasQuestion
+    }
+
+    func removeSessionFromMonitoring(_ sessionId: String) {
+        guard canRemoveSessionFromMonitoring(sessionId),
+              let session = sessions[sessionId] else { return }
+
+        var dismissedAt = session.lastActivity
+        if let path = session.transcriptPath,
+           let attributes = try? FileManager.default.attributesOfItem(atPath: path),
+           let modifiedAt = attributes[.modificationDate] as? Date,
+           modifiedAt > dismissedAt {
+            dismissedAt = modifiedAt
+        }
+        manuallyDismissedSessionActivity[sessionId] = dismissedAt
+        SessionPersistence.saveDismissedSessions(manuallyDismissedSessionActivity)
+        removeSession(sessionId)
+    }
+
+    @discardableResult
+    func clearManualSessionDismissal(_ sessionId: String) -> Bool {
+        guard manuallyDismissedSessionActivity.removeValue(forKey: sessionId) != nil else {
+            return false
+        }
+        SessionPersistence.saveDismissedSessions(manuallyDismissedSessionActivity)
+        return true
+    }
+
+    nonisolated static func shouldRediscoverDismissedSession(
+        dismissedAt: Date?,
+        modifiedAt: Date
+    ) -> Bool {
+        guard let dismissedAt else { return true }
+        return modifiedAt > dismissedAt
+    }
+
     // MARK: - Compact bar mascot rotation
 
     /// Cached sorted active session IDs — refreshed by refreshActiveIds()
@@ -1108,6 +1150,7 @@ final class AppState {
             && event.rawJSON["transcript_path"] is NSNull {
             return
         }
+        clearManualSessionDismissal(sessionId)
 
         if sessions[sessionId] == nil {
             sessions[sessionId] = SessionSnapshot()
@@ -1248,6 +1291,7 @@ final class AppState {
 
     func handlePermissionRequest(_ event: HookEvent, continuation: CheckedContinuation<Data, Never>) {
         let sessionId = event.sessionId ?? "default"
+        clearManualSessionDismissal(sessionId)
         if sessions[sessionId] == nil {
             sessions[sessionId] = SessionSnapshot()
         }
@@ -1487,6 +1531,7 @@ final class AppState {
 
     func handleQuestion(_ event: HookEvent, continuation: CheckedContinuation<Data, Never>) {
         let sessionId = event.sessionId ?? "default"
+        clearManualSessionDismissal(sessionId)
         if sessions[sessionId] == nil {
             sessions[sessionId] = SessionSnapshot()
         }
@@ -1521,6 +1566,7 @@ final class AppState {
 
     func handleAskUserQuestion(_ event: HookEvent, continuation: CheckedContinuation<Data, Never>) {
         let sessionId = event.sessionId ?? "default"
+        clearManualSessionDismissal(sessionId)
         if sessions[sessionId] == nil {
             sessions[sessionId] = SessionSnapshot()
         }
@@ -2439,6 +2485,15 @@ final class AppState {
     private func integrateDiscovered(_ discovered: [DiscoveredSession]) {
         var didMutate = false
         for info in discovered {
+            let dismissedAt = manuallyDismissedSessionActivity[info.sessionId]
+            guard Self.shouldRediscoverDismissedSession(
+                dismissedAt: dismissedAt,
+                modifiedAt: info.modifiedAt
+            ) else { continue }
+            if dismissedAt != nil {
+                clearManualSessionDismissal(info.sessionId)
+            }
+
             if routeDiscoveredSubsessionIfNeeded(info) {
                 didMutate = true
                 continue

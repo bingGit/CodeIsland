@@ -2245,6 +2245,18 @@ private struct SessionCard: View {
                         }
                         SessionTag(timeAgo(session.startTime))
                         TerminalBadge(session: session)
+                        if appState.canRemoveSessionFromMonitoring(sessionId) {
+                            NotchIconButton(
+                                icon: "xmark",
+                                tint: Color.white.opacity(0.75),
+                                tooltip: L10n.shared["remove_session_monitoring"]
+                            ) {
+                                appState.removeSessionFromMonitoring(sessionId)
+                            }
+                            .opacity(hovering ? 1 : 0)
+                            .allowsHitTesting(hovering)
+                            .accessibilityLabel(L10n.shared["remove_session_monitoring"])
+                        }
                     }
                 }
 

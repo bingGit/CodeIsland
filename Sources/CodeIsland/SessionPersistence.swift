@@ -36,6 +36,7 @@ struct PersistedSession: Codable {
 enum SessionPersistence {
     private static let dirPath = FileManager.default.homeDirectoryForCurrentUser.path + "/.codeisland"
     private static let filePath = dirPath + "/sessions.json"
+    private static let dismissedFilePath = dirPath + "/dismissed-sessions.json"
 
     static func save(_ sessions: [String: SessionSnapshot]) {
         let persisted: [PersistedSession] = sessions.compactMap { (id, s) in
@@ -87,5 +88,24 @@ enum SessionPersistence {
 
     static func clear() {
         try? FileManager.default.removeItem(atPath: filePath)
+    }
+
+    static func saveDismissedSessions(_ sessions: [String: Date]) {
+        let timestamps = sessions.mapValues(\.timeIntervalSince1970)
+        do {
+            try FileManager.default.createDirectory(atPath: dirPath, withIntermediateDirectories: true)
+            let data = try JSONEncoder().encode(timestamps)
+            try data.write(
+                to: URL(fileURLWithPath: dismissedFilePath),
+                options: Data.WritingOptions.atomic
+            )
+        } catch {}
+    }
+
+    static func loadDismissedSessions() -> [String: Date] {
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: dismissedFilePath)),
+              let timestamps = try? JSONDecoder().decode([String: TimeInterval].self, from: data)
+        else { return [:] }
+        return timestamps.mapValues(Date.init(timeIntervalSince1970:))
     }
 }
