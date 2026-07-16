@@ -4256,44 +4256,89 @@ final class AppState {
     /// Desktop threads have no task-specific process CWD to correlate with a
     /// transcript. Their session metadata is the authoritative discriminator.
     private nonisolated static func findActiveCodexDesktopSessions(base: String, fm: FileManager) -> [DiscoveredSession] {
-        let calendar = Calendar.current
         var results: [DiscoveredSession] = []
 
+        let modifiedAfter = Date().addingTimeInterval(-600)
+        for path in recentCodexTranscriptPaths(base: base, modifiedAfter: modifiedAfter, fm: fm) {
+            let file = (path as NSString).lastPathComponent
+            guard let attrs = try? fm.attributesOfItem(atPath: path),
+                  let modifiedAt = attrs[.modificationDate] as? Date,
+                  modifiedAt >= modifiedAfter,
+                  let cwd = codexDesktopTranscriptCwd(path: path)
+            else { continue }
+
+            let sessionId = extractCodexSessionId(from: file)
+            guard !sessionId.isEmpty else { continue }
+            let (model, messages) = readRecentFromCodexTranscript(path: path)
+            results.append(DiscoveredSession(
+                sessionId: sessionId,
+                cwd: cwd,
+                tty: nil,
+                model: model,
+                pid: nil,
+                modifiedAt: modifiedAt,
+                recentMessages: messages,
+                source: "codex",
+                status: codexDesktopTranscriptStatus(path: path),
+                termBundleId: Self.codexAppBundleId,
+                transcriptPath: path
+            ))
+        }
+        return results
+    }
+
+    /// Codex keeps a resumed thread in its original date directory. Use the
+    /// indexed rollout path instead of assuming active threads live under
+    /// today's directory. The date-directory scan remains as a compatibility
+    /// fallback for older Codex stores that do not expose the threads table.
+    nonisolated static func recentCodexTranscriptPaths(
+        base: String,
+        modifiedAfter: Date,
+        fm: FileManager,
+        statePath overrideStatePath: String? = nil,
+        now: Date = Date()
+    ) -> [String] {
+        let statePath = overrideStatePath
+            ?? (base as NSString).deletingLastPathComponent + "/state_5.sqlite"
+        var paths: [String] = withSQLiteDatabase(at: statePath) { db in
+            let sql = """
+                SELECT rollout_path
+                FROM threads
+                WHERE updated_at >= ?
+                ORDER BY updated_at DESC
+                LIMIT 100;
+                """
+            guard let statement = prepareSQLiteStatement(db: db, sql: sql) else { return nil }
+            defer { sqlite3_finalize(statement) }
+            sqlite3_bind_int64(statement, 1, sqlite3_int64(modifiedAfter.timeIntervalSince1970))
+
+            var indexedPaths: [String] = []
+            while sqlite3_step(statement) == SQLITE_ROW {
+                if let path = sqliteColumnString(statement, index: 0), !path.isEmpty {
+                    indexedPaths.append(path)
+                }
+            }
+            return indexedPaths
+        } ?? []
+
+        let calendar = Calendar.current
         for daysBack in 0..<2 {
-            guard let date = calendar.date(byAdding: .day, value: -daysBack, to: Date()) else { continue }
+            guard let date = calendar.date(byAdding: .day, value: -daysBack, to: now) else { continue }
             let directory = String(format: "\(base)/%04d/%02d/%02d",
                                    calendar.component(.year, from: date),
                                    calendar.component(.month, from: date),
                                    calendar.component(.day, from: date))
             guard let files = try? fm.contentsOfDirectory(atPath: directory) else { continue }
-
-            for file in files where file.hasSuffix(".jsonl") {
-                let path = "\(directory)/\(file)"
-                guard let attrs = try? fm.attributesOfItem(atPath: path),
-                      let modifiedAt = attrs[.modificationDate] as? Date,
-                      modifiedAt.timeIntervalSinceNow >= -600,
-                      let cwd = codexDesktopTranscriptCwd(path: path)
-                else { continue }
-
-                let sessionId = extractCodexSessionId(from: file)
-                guard !sessionId.isEmpty else { continue }
-                let (model, messages) = readRecentFromCodexTranscript(path: path)
-                results.append(DiscoveredSession(
-                    sessionId: sessionId,
-                    cwd: cwd,
-                    tty: nil,
-                    model: model,
-                    pid: nil,
-                    modifiedAt: modifiedAt,
-                    recentMessages: messages,
-                    source: "codex",
-                    status: codexDesktopTranscriptStatus(path: path),
-                    termBundleId: Self.codexAppBundleId,
-                    transcriptPath: path
-                ))
-            }
+            paths.append(contentsOf: files.filter { $0.hasSuffix(".jsonl") }.map { "\(directory)/\($0)" })
         }
-        return results
+
+        var seen: Set<String> = []
+        return paths.filter { path in
+            guard seen.insert(path).inserted,
+                  let attrs = try? fm.attributesOfItem(atPath: path),
+                  let modifiedAt = attrs[.modificationDate] as? Date else { return false }
+            return modifiedAt >= modifiedAfter
+        }
     }
 
     private nonisolated static func codexDesktopTranscriptCwd(path: String) -> String? {

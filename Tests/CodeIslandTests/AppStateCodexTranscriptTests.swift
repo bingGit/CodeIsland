@@ -1,7 +1,49 @@
 import XCTest
 @testable import CodeIsland
+import SQLite3
 
 final class AppStateCodexTranscriptTests: XCTestCase {
+    func testRecentCodexTranscriptPathsFindsResumedThreadInOldDateDirectory() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codeisland-codex-resumed-\(UUID().uuidString)")
+        let sessions = root.appendingPathComponent("sessions")
+        let oldDirectory = sessions.appendingPathComponent("2026/07/04")
+        try FileManager.default.createDirectory(at: oldDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let sessionId = "019f2c8e-4fbe-77a2-b306-5fb942b2df2b"
+        let transcript = oldDirectory.appendingPathComponent(
+            "rollout-2026-07-04T17-55-51-\(sessionId).jsonl"
+        )
+        try "{}\n".write(to: transcript, atomically: true, encoding: .utf8)
+
+        let now = Date()
+        try FileManager.default.setAttributes([.modificationDate: now], ofItemAtPath: transcript.path)
+        let statePath = root.appendingPathComponent("state_5.sqlite").path
+        var db: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(statePath, &db), SQLITE_OK)
+        defer { sqlite3_close_v2(db) }
+        XCTAssertEqual(sqlite3_exec(db, "CREATE TABLE threads (rollout_path TEXT, updated_at INTEGER);", nil, nil, nil), SQLITE_OK)
+
+        var statement: OpaquePointer?
+        XCTAssertEqual(sqlite3_prepare_v2(db, "INSERT INTO threads VALUES (?, ?);", -1, &statement, nil), SQLITE_OK)
+        defer { sqlite3_finalize(statement) }
+        let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+        _ = transcript.path.withCString { sqlite3_bind_text(statement, 1, $0, -1, transient) }
+        sqlite3_bind_int64(statement, 2, sqlite3_int64(now.timeIntervalSince1970))
+        XCTAssertEqual(sqlite3_step(statement), SQLITE_DONE)
+
+        let paths = AppState.recentCodexTranscriptPaths(
+            base: sessions.path,
+            modifiedAfter: now.addingTimeInterval(-600),
+            fm: .default,
+            statePath: statePath,
+            now: now
+        )
+
+        XCTAssertEqual(paths, [transcript.path])
+    }
+
     func testCodexLatestTerminalTurnTimestampPrefersNewestTerminalEvent() throws {
         let transcript = [
             #"{"timestamp":"2026-04-09T03:17:16.000Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"turn-1"}}"#,
