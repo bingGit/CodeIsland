@@ -38,6 +38,7 @@ extension AppState {
         guard var session = sessions[delta.sessionId] else { return }
         var mutated = false
         var shouldEnqueueCompletion = false
+        var shouldInvalidateCompletion = false
 
         if let prompt = delta.lastUserPrompt, session.lastUserPrompt != prompt {
             session.lastUserPrompt = prompt
@@ -61,11 +62,13 @@ extension AppState {
         if session.source == "codex", let lifecycle = delta.codexLifecycle {
             switch lifecycle {
             case .taskStarted, .userMessage:
+                shouldInvalidateCompletion = true
                 session.interrupted = false
                 session.status = .processing
                 session.currentTool = nil
                 session.toolDescription = nil
             case .agentWorking:
+                shouldInvalidateCompletion = true
                 if session.status != .waitingApproval && session.status != .waitingQuestion {
                     session.status = .running
                     session.currentTool = nil
@@ -87,6 +90,9 @@ extension AppState {
                 session.lastActivity = Date()
             }
             sessions[delta.sessionId] = session
+        }
+        if shouldInvalidateCompletion {
+            invalidateCompletion(for: delta.sessionId)
         }
         if shouldEnqueueCompletion {
             enqueueCompletion(delta.sessionId)

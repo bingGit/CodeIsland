@@ -228,6 +228,7 @@ extension AppState {
         }
         sessions[sessionId]?.status = .waitingQuestion
         sessions[sessionId]?.lastActivity = Date()
+        invalidateCompletion(for: sessionId)
 
         // Build the synthetic HookEvent carrying the correct sessionId so the
         // existing queue / drain / showNextPending plumbing routes it correctly.
@@ -273,6 +274,7 @@ extension AppState {
         if sessions[sessionId]?.status == .waitingQuestion {
             sessions[sessionId]?.status = .processing
         }
+        invalidateCompletion(for: sessionId)
         showNextPending()
         refreshDerivedState()
     }
@@ -347,6 +349,9 @@ extension AppState {
         applyCodexThreadStatus(&snapshot, status: thread["status"]?.asObject)
         snapshot.lastActivity = Date()
         sessions[sessionId] = snapshot
+        if snapshot.status != .idle {
+            invalidateCompletion(for: sessionId)
+        }
         attachTranscriptTailerIfNeeded(sessionId: sessionId)
         refreshDerivedState()
     }
@@ -366,6 +371,9 @@ extension AppState {
         applyCodexThreadStatus(&snapshot, status: params["status"]?.asObject)
         snapshot.lastActivity = Date()
         sessions[sessionId] = snapshot
+        if snapshot.status != .idle {
+            invalidateCompletion(for: sessionId)
+        }
         refreshDerivedState()
     }
 

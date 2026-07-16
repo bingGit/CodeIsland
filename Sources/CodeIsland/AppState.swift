@@ -860,6 +860,8 @@ final class AppState {
     }
 
     func enqueueCompletion(_ sessionId: String) {
+        guard canPresentCompletion(for: sessionId) else { return }
+
         switch Self.completionStyle() {
         case .off:
             // Panel stays compact — status indicators still update, but no
@@ -881,6 +883,31 @@ final class AppState {
         } else {
             // Show immediately
             showCompletion(sessionId)
+        }
+    }
+
+    private func canPresentCompletion(for sessionId: String) -> Bool {
+        guard let session = sessions[sessionId] else { return false }
+        // Some hook-based providers intentionally report a completed round while
+        // remaining in processing state. Codex `task_complete`, however, is a
+        // terminal turn signal and must never pop while that thread is active.
+        return session.source != "codex" || session.status == .idle
+    }
+
+    /// Drop a completion that belongs to an older turn as soon as the same
+    /// session becomes active again.
+    func invalidateCompletion(for sessionId: String) {
+        completionQueue.removeAll { $0 == sessionId }
+        guard case .completionCard(let visibleSessionId) = surface,
+              visibleSessionId == sessionId else { return }
+
+        autoCollapseTask?.cancel()
+        completionHasBeenEntered = false
+        deferCollapseOnMouseLeave = false
+        if !showNextPending() {
+            withAnimation(NotchAnimation.close) {
+                surface = .collapsed
+            }
         }
     }
 
@@ -963,6 +990,8 @@ final class AppState {
     }
 
     private func showCompletion(_ sessionId: String) {
+        guard canPresentCompletion(for: sessionId) else { return }
+
         // Fast path: terminal not even frontmost — show immediately
         guard shouldSuppressAppLevel(for: sessionId) else {
             doShowCompletion(sessionId)
@@ -978,7 +1007,7 @@ final class AppState {
                 guard let self else { return }
                 // Verify state hasn't changed while we were checking
                 // (e.g. approval/question card popped up, session was removed)
-                guard self.sessions[sessionId] != nil else { return }
+                guard self.canPresentCompletion(for: sessionId) else { return }
                 switch self.surface {
                 case .approvalCard, .questionCard: return  // don't overwrite higher-priority surfaces
                 default: break
@@ -993,6 +1022,7 @@ final class AppState {
     }
 
     private func doShowCompletion(_ sessionId: String) {
+        guard canPresentCompletion(for: sessionId) else { return }
         activeSessionId = sessionId
         surface = .completionCard(sessionId: sessionId)
         completionHasBeenEntered = false
@@ -1152,6 +1182,10 @@ final class AppState {
         resolveOrphanPermissionsOnActivity(event)
 
         let effects = reduceEvent(sessions: &sessions, event: event, maxHistory: maxHistory)
+
+        if normalizedEventName != "Stop", sessions[sessionId]?.status != .idle {
+            invalidateCompletion(for: sessionId)
+        }
 
         // After reduce: remoteHostId is authoritative (extractMetadata just ran),
         // so a remote session can never probe the local filesystem here.
@@ -1903,7 +1937,7 @@ final class AppState {
         } else if !completionQueue.isEmpty {
             while let next = completionQueue.first {
                 completionQueue.removeFirst()
-                if sessions[next] != nil {
+                if canPresentCompletion(for: next) {
                     withAnimation(NotchAnimation.pop) { doShowCompletion(next) }
                     return true
                 }
@@ -2516,6 +2550,9 @@ final class AppState {
                     sessions[info.sessionId]?.status = status
                     sessions[info.sessionId]?.lastActivity = info.modifiedAt
                     didMutate = true
+                }
+                if sessions[info.sessionId]?.status != .idle {
+                    invalidateCompletion(for: info.sessionId)
                 }
                 if let bundleId = info.termBundleId, sessions[info.sessionId]?.termBundleId != bundleId {
                     sessions[info.sessionId]?.termBundleId = bundleId
