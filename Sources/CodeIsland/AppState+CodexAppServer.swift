@@ -314,7 +314,17 @@ extension AppState {
     private func applyCodexThreadStartedNotification(params: [String: AnyCodableLike]) {
         guard let thread = params["thread"]?.asObject else { return }
         guard let threadId = thread["id"]?.asString else { return }
+        let transcriptPath = thread["path"]?.asString
         let sessionId = AppState.codexAppSessionPrefix + threadId
+        if Self.isCodexInternalGuardianThread(
+            threadId: threadId,
+            transcriptPath: transcriptPath
+        ) {
+            sessions.removeValue(forKey: sessionId)
+            detachTranscriptTailer(sessionId: sessionId)
+            refreshDerivedState()
+            return
+        }
         clearManualSessionDismissal(sessionId)
 
         var snapshot = sessions[sessionId] ?? SessionSnapshot(startTime: Date())
@@ -330,7 +340,7 @@ extension AppState {
         if let name = thread["name"]?.asString, !name.isEmpty {
             snapshot.sessionTitle = name
         }
-        if let path = thread["path"]?.asString, !path.isEmpty {
+        if let path = transcriptPath, !path.isEmpty {
             snapshot.transcriptPath = path
         }
 

@@ -319,21 +319,13 @@ final class AppState {
             removeSession(key)
         }
 
-        // 4. Remove idle sessions past timeout (user setting, or 10 min default for no-monitor sessions)
+        // 4. Remove idle sessions only when the configured timeout expires.
         let userTimeout = SettingsManager.shared.sessionTimeout
-        let defaultStaleMinutes = 10  // for sessions without process monitor
         for (key, session) in sessions where session.status == .idle {
             let idleMinutes = Int(-session.lastActivity.timeIntervalSinceNow / 60)
-            let hasMonitor = processMonitors[key] != nil
-            let hostAppIsRunning = (session.isNativeAppMode
-                || (session.source == "codex" && session.cliPid == nil))
-                && session.termBundleId.map(runningBundleIds.contains) == true
             if Self.shouldRemoveIdleSession(
                 idleMinutes: idleMinutes,
-                userTimeout: userTimeout,
-                hasMonitor: hasMonitor,
-                hostAppIsRunning: hostAppIsRunning,
-                defaultStaleMinutes: defaultStaleMinutes
+                userTimeout: userTimeout
             ) {
                 removeSession(key)
             }
@@ -347,21 +339,10 @@ final class AppState {
 
     nonisolated static func shouldRemoveIdleSession(
         idleMinutes: Int,
-        userTimeout: Int,
-        hasMonitor: Bool,
-        hostAppIsRunning: Bool,
-        defaultStaleMinutes: Int = 10
+        userTimeout: Int
     ) -> Bool {
-        // Explicit user settings apply consistently to every session type.
-        if userTimeout > 0 {
-            return idleMinutes >= userTimeout
-        }
-        // App-hosted sessions have no task-specific PID monitor. Their host app
-        // lifecycle is checked separately, so do not treat them as hook-only.
-        if hostAppIsRunning {
-            return false
-        }
-        return !hasMonitor && idleMinutes >= defaultStaleMinutes
+        guard userTimeout > 0 else { return false }
+        return idleMinutes >= userTimeout
     }
 
     private nonisolated static func currentPluginSessionMode() -> String {
@@ -2247,6 +2228,12 @@ final class AppState {
         for p in persisted where p.lastActivity > cutoff {
             guard sessions[p.sessionId] == nil else { continue }
             guard let source = SessionSnapshot.normalizedSupportedSource(p.source) else { continue }
+            if source == "codex",
+               Self.isCodexInternalGuardianThread(
+                threadId: p.providerSessionId ?? p.sessionId
+               ) {
+                continue
+            }
             var snapshot = SessionSnapshot(startTime: p.startTime)
             snapshot.cwd = p.cwd
             snapshot.source = source
@@ -4465,6 +4452,7 @@ final class AppState {
               let originator = payload["originator"] as? String,
               let cwd = payload["cwd"] as? String,
               !cwd.isEmpty else { return nil }
+        guard !isCodexInternalGuardianPayload(payload) else { return nil }
 
         switch originator {
         case "Codex Desktop":
@@ -4474,6 +4462,51 @@ final class AppState {
         default:
             return nil
         }
+    }
+
+    nonisolated static func isCodexInternalGuardianThread(
+        threadId: String,
+        transcriptPath: String? = nil,
+        statePath overrideStatePath: String? = nil
+    ) -> Bool {
+        if let transcriptPath,
+           let firstLine = readFirstLine(path: transcriptPath),
+           let data = firstLine.data(using: .utf8),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let payload = json["payload"] as? [String: Any] {
+            return isCodexInternalGuardianPayload(payload)
+        }
+
+        let statePath = overrideStatePath ?? {
+            let home = FileManager.default.homeDirectoryForCurrentUser.path
+            return "\(home)/.codex/state_5.sqlite"
+        }()
+        return withSQLiteDatabase(at: statePath) { db in
+            let sql = "SELECT source, thread_source FROM threads WHERE id = ? LIMIT 1;"
+            guard let statement = prepareSQLiteStatement(db: db, sql: sql) else { return nil }
+            defer { sqlite3_finalize(statement) }
+            bindSQLiteText(threadId, to: statement, index: 1)
+            guard sqlite3_step(statement) == SQLITE_ROW else { return false }
+
+            let threadSource = sqliteColumnString(statement, index: 1)
+            guard threadSource == "subagent",
+                  let source = sqliteColumnString(statement, index: 0),
+                  let data = source.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else { return false }
+            return isCodexInternalGuardianSource(json)
+        } ?? false
+    }
+
+    private nonisolated static func isCodexInternalGuardianPayload(_ payload: [String: Any]) -> Bool {
+        guard payload["thread_source"] as? String == "subagent",
+              let source = payload["source"] as? [String: Any] else { return false }
+        return isCodexInternalGuardianSource(source)
+    }
+
+    private nonisolated static func isCodexInternalGuardianSource(_ source: [String: Any]) -> Bool {
+        guard let subagent = source["subagent"] as? [String: Any] else { return false }
+        return subagent["other"] as? String == "guardian"
     }
 
     private nonisolated static func codexVSCodeHostBundleId() -> String? {

@@ -19,30 +19,24 @@ final class AppStateCleanupTests: XCTestCase {
         ))
     }
 
-    func testRunningNativeAppSessionIgnoresDefaultNoMonitorTimeout() {
+    func testNoCleanupPreservesIdleSession() {
         XCTAssertFalse(AppState.shouldRemoveIdleSession(
             idleMinutes: 30,
-            userTimeout: 0,
-            hasMonitor: false,
-            hostAppIsRunning: true
+            userTimeout: 0
         ))
     }
 
-    func testStoppedNativeAppSessionCanUseDefaultNoMonitorTimeout() {
-        XCTAssertTrue(AppState.shouldRemoveIdleSession(
-            idleMinutes: 10,
-            userTimeout: 0,
-            hasMonitor: false,
-            hostAppIsRunning: false
+    func testConfiguredTimeoutKeepsRecentlyIdleSession() {
+        XCTAssertFalse(AppState.shouldRemoveIdleSession(
+            idleMinutes: 29,
+            userTimeout: 30
         ))
     }
 
-    func testUserTimeoutStillAppliesToRunningNativeAppSession() {
+    func testConfiguredTimeoutRemovesExpiredIdleSession() {
         XCTAssertTrue(AppState.shouldRemoveIdleSession(
-            idleMinutes: 5,
-            userTimeout: 5,
-            hasMonitor: false,
-            hostAppIsRunning: true
+            idleMinutes: 30,
+            userTimeout: 30
         ))
     }
 }

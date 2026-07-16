@@ -43,6 +43,58 @@ final class AppStateCodexTranscriptTests: XCTestCase {
         )
     }
 
+    func testCodexGuardianTranscriptIsNotDiscoveredAsUserSession() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codeisland-codex-guardian-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let transcript = directory.appendingPathComponent("rollout.jsonl")
+        let line = #"{"type":"session_meta","payload":{"originator":"Codex Desktop","cwd":"/repo","thread_source":"subagent","source":{"subagent":{"other":"guardian"}}}}"#
+        try (line + "\n").write(to: transcript, atomically: true, encoding: .utf8)
+
+        XCTAssertNil(AppState.codexHostedTranscriptMetadata(path: transcript.path))
+        XCTAssertTrue(AppState.isCodexInternalGuardianThread(
+            threadId: "guardian",
+            transcriptPath: transcript.path
+        ))
+    }
+
+    func testCodexGuardianIsRecognizedFromThreadDatabase() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codeisland-codex-guardian-db-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let statePath = directory.appendingPathComponent("state_5.sqlite").path
+        var db: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(statePath, &db), SQLITE_OK)
+        defer { sqlite3_close_v2(db) }
+        XCTAssertEqual(sqlite3_exec(
+            db,
+            "CREATE TABLE threads (id TEXT, source TEXT, thread_source TEXT);",
+            nil,
+            nil,
+            nil
+        ), SQLITE_OK)
+        XCTAssertEqual(sqlite3_exec(
+            db,
+            #"INSERT INTO threads VALUES ('guardian', '{"subagent":{"other":"guardian"}}', 'subagent');"#,
+            nil,
+            nil,
+            nil
+        ), SQLITE_OK)
+
+        XCTAssertTrue(AppState.isCodexInternalGuardianThread(
+            threadId: "guardian",
+            statePath: statePath
+        ))
+        XCTAssertFalse(AppState.isCodexInternalGuardianThread(
+            threadId: "missing",
+            statePath: statePath
+        ))
+    }
+
     func testRecentCodexTranscriptPathsFindsResumedThreadInOldDateDirectory() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("codeisland-codex-resumed-\(UUID().uuidString)")
