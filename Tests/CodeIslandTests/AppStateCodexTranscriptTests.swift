@@ -3,6 +3,26 @@ import XCTest
 import SQLite3
 
 final class AppStateCodexTranscriptTests: XCTestCase {
+    func testCodexDesktopThreadsInSameWorkspaceRemainDistinct() {
+        XCTAssertFalse(AppState.shouldDeduplicateDiscoveredSession(
+            existingSource: "codex",
+            existingCwd: "/repo",
+            existingTermBundleId: "com.openai.codex",
+            discoveredSource: "codex",
+            discoveredCwd: "/repo",
+            discoveredTermBundleId: "com.openai.codex"
+        ))
+
+        XCTAssertTrue(AppState.shouldDeduplicateDiscoveredSession(
+            existingSource: "codex",
+            existingCwd: "/repo",
+            existingTermBundleId: nil,
+            discoveredSource: "codex",
+            discoveredCwd: "/repo",
+            discoveredTermBundleId: nil
+        ))
+    }
+
     func testRecentCodexTranscriptPathsFindsResumedThreadInOldDateDirectory() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("codeisland-codex-resumed-\(UUID().uuidString)")

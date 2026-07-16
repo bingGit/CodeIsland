@@ -2464,8 +2464,14 @@ final class AppState {
             // Never merge a discovery (CLI) session with an existing native app session —
             // they're fundamentally different even if they share source + cwd.
             let duplicateKey = sessions.first(where: { (_, existing) in
-                guard existing.source == info.source,
-                      existing.cwd != nil, existing.cwd == info.cwd else { return false }
+                guard Self.shouldDeduplicateDiscoveredSession(
+                    existingSource: existing.source,
+                    existingCwd: existing.cwd,
+                    existingTermBundleId: existing.termBundleId,
+                    discoveredSource: info.source,
+                    discoveredCwd: info.cwd,
+                    discoveredTermBundleId: info.termBundleId
+                ) else { return false }
                 // Don't merge CLI discovery into a stale native app session whose app has quit —
                 // the PID was likely reattached incorrectly. If the native app IS running, allow merge.
                 if existing.isNativeAppMode,
@@ -2548,6 +2554,28 @@ final class AppState {
             scheduleSave()
         }
         refreshDerivedState()
+    }
+
+    nonisolated static func shouldDeduplicateDiscoveredSession(
+        existingSource: String,
+        existingCwd: String?,
+        existingTermBundleId: String?,
+        discoveredSource: String,
+        discoveredCwd: String,
+        discoveredTermBundleId: String?
+    ) -> Bool {
+        guard existingSource == discoveredSource,
+              existingCwd != nil,
+              existingCwd == discoveredCwd else { return false }
+
+        // Desktop threads do not have task-specific PIDs. Multiple ChatGPT/Codex
+        // tasks may share a workspace, so cwd is not a valid identity key for them.
+        if discoveredSource == "codex",
+           existingTermBundleId == codexAppBundleId,
+           discoveredTermBundleId == codexAppBundleId {
+            return false
+        }
+        return true
     }
 
     @discardableResult
