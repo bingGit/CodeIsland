@@ -93,7 +93,10 @@ final class AppState {
     /// constructed so the delta handler can safely capture `self`.
     @ObservationIgnored
     lazy var transcriptTailer: JSONLTailer = JSONLTailer { [weak self] delta in
-        Task { @MainActor in
+        // JSONLTailer emits lifecycle rows in transcript order. Dispatching each
+        // row through an independent Task can reorder `agent_message` and
+        // `task_complete`, so keep delivery FIFO on the main queue.
+        DispatchQueue.main.async {
             self?.applyTranscriptDelta(delta)
         }
     }

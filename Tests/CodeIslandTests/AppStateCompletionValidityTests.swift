@@ -40,6 +40,26 @@ final class AppStateCompletionValidityTests: XCTestCase {
         }
     }
 
+    func testCodexCompletionStillNotifiesWhenDiscoveryAlreadySetSessionIdle() {
+        withExpandedCompletions {
+            let appState = AppState()
+            var session = SessionSnapshot()
+            session.source = "codex"
+            session.status = .idle
+            appState.sessions["codex"] = session
+
+            appState.applyTranscriptDelta(ConversationTailDelta(
+                sessionId: "codex",
+                lastUserPrompt: nil,
+                lastAssistantMessage: "Finished",
+                codexLifecycle: .taskCompleted
+            ))
+
+            XCTAssertEqual(appState.sessions["codex"]?.status, .idle)
+            XCTAssertEqual(appState.surface, .completionCard(sessionId: "codex"))
+        }
+    }
+
     func testQueuedCodexCompletionIsSkippedAfterSessionBecomesActive() {
         withExpandedCompletions {
             let appState = AppState()

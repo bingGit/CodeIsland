@@ -75,11 +75,13 @@ extension AppState {
                     session.toolDescription = nil
                 }
             case .taskCompleted:
-                let wasActive = session.status != .idle
                 session.status = .idle
                 session.currentTool = nil
                 session.toolDescription = nil
-                shouldEnqueueCompletion = wasActive
+                // Discovery may have already observed the same terminal row and
+                // set the session idle. This delta is incremental (tailers attach
+                // at EOF), so the completion itself remains authoritative.
+                shouldEnqueueCompletion = true
             }
             session.lastActivity = Date()
             mutated = true
