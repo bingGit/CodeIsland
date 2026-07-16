@@ -995,6 +995,14 @@ final class AppState {
     private func showCompletion(_ sessionId: String) {
         guard canPresentCompletion(for: sessionId) else { return }
 
+        // When the island is configured to disappear with the last active session,
+        // suppressing that session's completion would leave no visible completion
+        // signal at all: the working state vanishes and no card replaces it.
+        if shouldKeepLastCompletionVisible(for: sessionId) {
+            doShowCompletion(sessionId)
+            return
+        }
+
         // Fast path: terminal not even frontmost — show immediately
         guard shouldSuppressAppLevel(for: sessionId) else {
             doShowCompletion(sessionId)
@@ -1021,6 +1029,14 @@ final class AppState {
                     }
                 }
             }
+        }
+    }
+
+    func shouldKeepLastCompletionVisible(for sessionId: String) -> Bool {
+        guard UserDefaults.standard.bool(forKey: SettingsKey.hideWhenNoSession),
+              sessions[sessionId]?.status == .idle else { return false }
+        return !sessions.contains { id, session in
+            id != sessionId && session.status != .idle
         }
     }
 

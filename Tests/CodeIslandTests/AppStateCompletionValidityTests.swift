@@ -60,6 +60,30 @@ final class AppStateCompletionValidityTests: XCTestCase {
         }
     }
 
+    func testLastIdleCompletionStaysVisibleWhenInactiveIslandWouldHide() {
+        let defaults = UserDefaults.standard
+        let previousHideWhenNoSession = defaults.object(forKey: SettingsKey.hideWhenNoSession)
+        defaults.set(true, forKey: SettingsKey.hideWhenNoSession)
+        defer {
+            restore(previousHideWhenNoSession, forKey: SettingsKey.hideWhenNoSession, in: defaults)
+        }
+
+        let appState = AppState()
+        var completed = SessionSnapshot()
+        completed.source = "codex"
+        completed.status = .idle
+        appState.sessions["completed"] = completed
+
+        XCTAssertTrue(appState.shouldKeepLastCompletionVisible(for: "completed"))
+
+        var active = SessionSnapshot()
+        active.source = "codex"
+        active.status = .running
+        appState.sessions["active"] = active
+
+        XCTAssertFalse(appState.shouldKeepLastCompletionVisible(for: "completed"))
+    }
+
     func testQueuedCodexCompletionIsSkippedAfterSessionBecomesActive() {
         withExpandedCompletions {
             let appState = AppState()
