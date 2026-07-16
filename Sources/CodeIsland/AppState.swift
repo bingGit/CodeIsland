@@ -4288,7 +4288,7 @@ final class AppState {
                     recentMessages: messages,
                     source: "codex",
                     status: codexDesktopTranscriptStatus(path: path),
-                    termBundleId: "com.openai.chat",
+                    termBundleId: Self.codexAppBundleId,
                     transcriptPath: path
                 ))
             }
