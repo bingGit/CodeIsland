@@ -7,20 +7,40 @@ final class AppStateCodexTranscriptTests: XCTestCase {
         XCTAssertFalse(AppState.shouldDeduplicateDiscoveredSession(
             existingSource: "codex",
             existingCwd: "/repo",
-            existingTermBundleId: "com.openai.codex",
             discoveredSource: "codex",
             discoveredCwd: "/repo",
-            discoveredTermBundleId: "com.openai.codex"
+            discoveredPid: nil
         ))
 
         XCTAssertTrue(AppState.shouldDeduplicateDiscoveredSession(
             existingSource: "codex",
             existingCwd: "/repo",
-            existingTermBundleId: nil,
             discoveredSource: "codex",
             discoveredCwd: "/repo",
-            discoveredTermBundleId: nil
+            discoveredPid: 123
         ))
+    }
+
+    func testCodexVSCodeTranscriptIsDiscoveredAsHostedSession() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codeisland-codex-vscode-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let transcript = directory.appendingPathComponent("rollout.jsonl")
+        let line = #"{"type":"session_meta","payload":{"originator":"codex_vscode","cwd":"/repo"}}"#
+        try (line + "\n").write(to: transcript, atomically: true, encoding: .utf8)
+
+        XCTAssertEqual(
+            AppState.codexHostedTranscriptMetadata(
+                path: transcript.path,
+                vscodeHostBundleId: "com.todesktop.230313mzl4w4u92"
+            ),
+            CodexHostedTranscriptMetadata(
+                cwd: "/repo",
+                termBundleId: "com.todesktop.230313mzl4w4u92"
+            )
+        )
     }
 
     func testRecentCodexTranscriptPathsFindsResumedThreadInOldDateDirectory() throws {

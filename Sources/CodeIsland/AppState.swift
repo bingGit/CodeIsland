@@ -13,6 +13,11 @@ struct CodexSubagentMetadata: Equatable, Sendable {
     let agentNickname: String?
 }
 
+struct CodexHostedTranscriptMetadata: Equatable, Sendable {
+    let cwd: String
+    let termBundleId: String?
+}
+
 struct ProcessIdentity: Equatable {
     let pid: pid_t
     let startTime: Date?
@@ -318,13 +323,14 @@ final class AppState {
         for (key, session) in sessions where session.status == .idle {
             let idleMinutes = Int(-session.lastActivity.timeIntervalSinceNow / 60)
             let hasMonitor = processMonitors[key] != nil
-            let nativeAppIsRunning = session.isNativeAppMode
+            let hostAppIsRunning = (session.isNativeAppMode
+                || (session.source == "codex" && session.cliPid == nil))
                 && session.termBundleId.map(runningBundleIds.contains) == true
             if Self.shouldRemoveIdleSession(
                 idleMinutes: idleMinutes,
                 userTimeout: userTimeout,
                 hasMonitor: hasMonitor,
-                nativeAppIsRunning: nativeAppIsRunning,
+                hostAppIsRunning: hostAppIsRunning,
                 defaultStaleMinutes: defaultStaleMinutes
             ) {
                 removeSession(key)
@@ -341,16 +347,16 @@ final class AppState {
         idleMinutes: Int,
         userTimeout: Int,
         hasMonitor: Bool,
-        nativeAppIsRunning: Bool,
+        hostAppIsRunning: Bool,
         defaultStaleMinutes: Int = 10
     ) -> Bool {
         // Explicit user settings apply consistently to every session type.
         if userTimeout > 0 {
             return idleMinutes >= userTimeout
         }
-        // Native desktop sessions have no task-specific PID monitor. Their app
+        // App-hosted sessions have no task-specific PID monitor. Their host app
         // lifecycle is checked separately, so do not treat them as hook-only.
-        if nativeAppIsRunning {
+        if hostAppIsRunning {
             return false
         }
         return !hasMonitor && idleMinutes >= defaultStaleMinutes
@@ -2490,10 +2496,9 @@ final class AppState {
                 guard Self.shouldDeduplicateDiscoveredSession(
                     existingSource: existing.source,
                     existingCwd: existing.cwd,
-                    existingTermBundleId: existing.termBundleId,
                     discoveredSource: info.source,
                     discoveredCwd: info.cwd,
-                    discoveredTermBundleId: info.termBundleId
+                    discoveredPid: info.pid
                 ) else { return false }
                 // Don't merge CLI discovery into a stale native app session whose app has quit —
                 // the PID was likely reattached incorrectly. If the native app IS running, allow merge.
@@ -2582,20 +2587,17 @@ final class AppState {
     nonisolated static func shouldDeduplicateDiscoveredSession(
         existingSource: String,
         existingCwd: String?,
-        existingTermBundleId: String?,
         discoveredSource: String,
         discoveredCwd: String,
-        discoveredTermBundleId: String?
+        discoveredPid: pid_t?
     ) -> Bool {
         guard existingSource == discoveredSource,
               existingCwd != nil,
               existingCwd == discoveredCwd else { return false }
 
-        // Desktop threads do not have task-specific PIDs. Multiple ChatGPT/Codex
-        // tasks may share a workspace, so cwd is not a valid identity key for them.
-        if discoveredSource == "codex",
-           existingTermBundleId == codexAppBundleId,
-           discoveredTermBundleId == codexAppBundleId {
+        // App-hosted Codex threads do not have task-specific PIDs. Multiple
+        // threads may share a workspace, so cwd is not a valid identity key.
+        if discoveredSource == "codex", discoveredPid == nil {
             return false
         }
         return true
@@ -4300,22 +4302,26 @@ final class AppState {
                 agentNickname: subagentMetadata?.agentNickname
             ))
         }
-        results.append(contentsOf: findActiveCodexDesktopSessions(base: sessionsBase, fm: fm))
+        results.append(contentsOf: findActiveCodexHostedSessions(base: sessionsBase, fm: fm))
         return results
     }
 
-    /// Desktop threads have no task-specific process CWD to correlate with a
-    /// transcript. Their session metadata is the authoritative discriminator.
-    private nonisolated static func findActiveCodexDesktopSessions(base: String, fm: FileManager) -> [DiscoveredSession] {
+    /// Desktop and IDE-hosted threads have no task-specific process CWD to
+    /// correlate with a transcript. Their session metadata is authoritative.
+    private nonisolated static func findActiveCodexHostedSessions(base: String, fm: FileManager) -> [DiscoveredSession] {
         var results: [DiscoveredSession] = []
 
         let modifiedAfter = Date().addingTimeInterval(-600)
+        let vscodeHostBundleId = codexVSCodeHostBundleId()
         for path in recentCodexTranscriptPaths(base: base, modifiedAfter: modifiedAfter, fm: fm) {
             let file = (path as NSString).lastPathComponent
             guard let attrs = try? fm.attributesOfItem(atPath: path),
                   let modifiedAt = attrs[.modificationDate] as? Date,
                   modifiedAt >= modifiedAfter,
-                  let cwd = codexDesktopTranscriptCwd(path: path)
+                  let metadata = codexHostedTranscriptMetadata(
+                    path: path,
+                    vscodeHostBundleId: vscodeHostBundleId
+                  )
             else { continue }
 
             let sessionId = extractCodexSessionId(from: file)
@@ -4323,7 +4329,7 @@ final class AppState {
             let (model, messages) = readRecentFromCodexTranscript(path: path)
             results.append(DiscoveredSession(
                 sessionId: sessionId,
-                cwd: cwd,
+                cwd: metadata.cwd,
                 tty: nil,
                 model: model,
                 pid: nil,
@@ -4331,7 +4337,7 @@ final class AppState {
                 recentMessages: messages,
                 source: "codex",
                 status: codexDesktopTranscriptStatus(path: path),
-                termBundleId: Self.codexAppBundleId,
+                termBundleId: metadata.termBundleId,
                 transcriptPath: path
             ))
         }
@@ -4392,16 +4398,38 @@ final class AppState {
         }
     }
 
-    private nonisolated static func codexDesktopTranscriptCwd(path: String) -> String? {
+    nonisolated static func codexHostedTranscriptMetadata(
+        path: String,
+        vscodeHostBundleId: String? = nil
+    ) -> CodexHostedTranscriptMetadata? {
         guard let firstLine = readFirstLine(path: path),
               let data = firstLine.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               json["type"] as? String == "session_meta",
               let payload = json["payload"] as? [String: Any],
-              payload["originator"] as? String == "Codex Desktop",
+              let originator = payload["originator"] as? String,
               let cwd = payload["cwd"] as? String,
               !cwd.isEmpty else { return nil }
-        return cwd
+
+        switch originator {
+        case "Codex Desktop":
+            return CodexHostedTranscriptMetadata(cwd: cwd, termBundleId: codexAppBundleId)
+        case "codex_vscode":
+            return CodexHostedTranscriptMetadata(cwd: cwd, termBundleId: vscodeHostBundleId)
+        default:
+            return nil
+        }
+    }
+
+    private nonisolated static func codexVSCodeHostBundleId() -> String? {
+        let knownHosts = [
+            "com.todesktop.230313mzl4w4u92", // Cursor
+            "com.microsoft.VSCode",
+            "com.vscodium",
+            "com.codeium.windsurf"
+        ]
+        let running = Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
+        return knownHosts.first(where: running.contains)
     }
 
     private nonisolated static func codexDesktopTranscriptStatus(path: String) -> AgentStatus {

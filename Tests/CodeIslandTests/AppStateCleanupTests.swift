@@ -7,7 +7,7 @@ final class AppStateCleanupTests: XCTestCase {
             idleMinutes: 30,
             userTimeout: 0,
             hasMonitor: false,
-            nativeAppIsRunning: true
+            hostAppIsRunning: true
         ))
     }
 
@@ -16,7 +16,7 @@ final class AppStateCleanupTests: XCTestCase {
             idleMinutes: 10,
             userTimeout: 0,
             hasMonitor: false,
-            nativeAppIsRunning: false
+            hostAppIsRunning: false
         ))
     }
 
@@ -25,7 +25,7 @@ final class AppStateCleanupTests: XCTestCase {
             idleMinutes: 5,
             userTimeout: 5,
             hasMonitor: false,
-            nativeAppIsRunning: true
+            hostAppIsRunning: true
         ))
     }
 }
