@@ -37,6 +37,7 @@ extension AppState {
     func applyTranscriptDelta(_ delta: ConversationTailDelta) {
         guard var session = sessions[delta.sessionId] else { return }
         var mutated = false
+        var shouldEnqueueCompletion = false
 
         if let prompt = delta.lastUserPrompt, session.lastUserPrompt != prompt {
             session.lastUserPrompt = prompt
@@ -53,9 +54,47 @@ extension AppState {
             mutated = true
         }
 
-        if mutated {
+        // Codex Desktop does not emit user-configurable hooks for its GUI
+        // threads. Its rollout transcript is the real-time lifecycle source,
+        // so map those events onto the same session states Cursor reaches via
+        // beforeSubmitPrompt / afterAgentResponse / stop hooks.
+        if session.source == "codex", let lifecycle = delta.codexLifecycle {
+            switch lifecycle {
+            case .taskStarted, .userMessage:
+                session.interrupted = false
+                session.status = .processing
+                session.currentTool = nil
+                session.toolDescription = nil
+            case .agentWorking:
+                if session.status != .waitingApproval && session.status != .waitingQuestion {
+                    session.status = .running
+                    session.currentTool = nil
+                    session.toolDescription = nil
+                }
+            case .taskCompleted:
+                let wasActive = session.status != .idle
+                session.status = .idle
+                session.currentTool = nil
+                session.toolDescription = nil
+                shouldEnqueueCompletion = wasActive
+            }
             session.lastActivity = Date()
+            mutated = true
+        }
+
+        if mutated {
+            if delta.codexLifecycle == nil {
+                session.lastActivity = Date()
+            }
             sessions[delta.sessionId] = session
+        }
+        if shouldEnqueueCompletion {
+            enqueueCompletion(delta.sessionId)
+        }
+        if mutated {
+            scheduleSave()
+            startRotationIfNeeded()
+            refreshDerivedState()
         }
     }
 }

@@ -104,6 +104,38 @@ final class JSONLTailerTests: XCTestCase {
         XCTAssertNil(result.delta.lastUserPrompt)
     }
 
+    func testScanLinesExtractsCodexDesktopLifecycleEvents() {
+        let lines = [
+            codexEventLine(type: "task_started"),
+            codexEventLine(type: "user_message", message: "Add transcript lifecycle monitoring"),
+            codexEventLine(type: "agent_reasoning"),
+            codexEventLine(type: "agent_message", message: "I am working on it."),
+            codexEventLine(type: "task_complete"),
+        ].joined(separator: "\n") + "\n"
+
+        let result = JSONLTailer.scanLines(Data(lines.utf8))
+
+        XCTAssertEqual(result.delta.lastUserPrompt, "Add transcript lifecycle monitoring")
+        XCTAssertEqual(result.delta.lastAssistantMessage, "I am working on it.")
+        XCTAssertEqual(result.delta.codexLifecycle, .taskCompleted)
+        XCTAssertEqual(result.deltas.map(\.codexLifecycle), [
+            .taskStarted,
+            .userMessage,
+            .agentWorking,
+            .agentWorking,
+            .taskCompleted,
+        ])
+    }
+
+    func testScanLinesMarksCodexReasoningAsWorking() {
+        let line = codexEventLine(type: "agent_reasoning") + "\n"
+
+        let result = JSONLTailer.scanLines(Data(line.utf8))
+
+        XCTAssertEqual(result.delta.codexLifecycle, .agentWorking)
+        XCTAssertTrue(result.delta.lastUserPrompt == nil && result.delta.lastAssistantMessage == nil)
+    }
+
     // MARK: - extractText
 
     func testExtractTextFromPlainString() {
@@ -226,6 +258,12 @@ final class JSONLTailerTests: XCTestCase {
             ]
         ]
         return jsonString(payload)
+    }
+
+    private func codexEventLine(type: String, message: String? = nil) -> String {
+        var event: [String: Any] = ["type": type]
+        if let message { event["message"] = message }
+        return jsonString(["type": "event_msg", "payload": event])
     }
 
     private func userLine(text: String) -> String {

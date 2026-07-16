@@ -1,21 +1,38 @@
 import Foundation
 import Darwin
 
+/// Lifecycle signals emitted by Codex Desktop's local rollout transcript.
+/// These are intentionally separate from generic chat messages because they
+/// drive the Dynamic Island state even when no user-visible text is appended.
+public enum CodexTranscriptLifecycle: Equatable, Sendable {
+    case taskStarted
+    case userMessage
+    case agentWorking
+    case taskCompleted
+}
+
 /// A delta emitted by `JSONLTailer` whenever the watched transcript grows.
 public struct ConversationTailDelta: Equatable, Sendable {
     public let sessionId: String
     public let lastUserPrompt: String?
     public let lastAssistantMessage: String?
+    public let codexLifecycle: CodexTranscriptLifecycle?
 
-    public init(sessionId: String, lastUserPrompt: String?, lastAssistantMessage: String?) {
+    public init(
+        sessionId: String,
+        lastUserPrompt: String?,
+        lastAssistantMessage: String?,
+        codexLifecycle: CodexTranscriptLifecycle? = nil
+    ) {
         self.sessionId = sessionId
         self.lastUserPrompt = lastUserPrompt
         self.lastAssistantMessage = lastAssistantMessage
+        self.codexLifecycle = codexLifecycle
     }
 
     /// A delta only carries signal when at least one field is non-nil.
     public var isEmpty: Bool {
-        lastUserPrompt == nil && lastAssistantMessage == nil
+        lastUserPrompt == nil && lastAssistantMessage == nil && codexLifecycle == nil
     }
 }
 
@@ -183,11 +200,12 @@ public final class JSONLTailer: @unchecked Sendable {
         watch.pendingFragment = scan.trailingFragment
         watch.offset += off_t(combined.count - scan.trailingFragment.count)
 
-        if !scan.delta.isEmpty {
+        for scannedDelta in scan.deltas {
             let delta = ConversationTailDelta(
                 sessionId: watch.sessionId,
-                lastUserPrompt: scan.delta.lastUserPrompt,
-                lastAssistantMessage: scan.delta.lastAssistantMessage
+                lastUserPrompt: scannedDelta.lastUserPrompt,
+                lastAssistantMessage: scannedDelta.lastAssistantMessage,
+                codexLifecycle: scannedDelta.codexLifecycle
             )
             onDelta(delta)
         }
@@ -220,9 +238,15 @@ public final class JSONLTailer: @unchecked Sendable {
         public struct Delta: Equatable {
             public var lastUserPrompt: String?
             public var lastAssistantMessage: String?
-            public var isEmpty: Bool { lastUserPrompt == nil && lastAssistantMessage == nil }
+            public var codexLifecycle: CodexTranscriptLifecycle?
+            public var isEmpty: Bool {
+                lastUserPrompt == nil && lastAssistantMessage == nil && codexLifecycle == nil
+            }
         }
         public let delta: Delta
+        /// Per-line signals in source order. The aggregate `delta` remains for
+        /// callers that only need the latest user/assistant text.
+        public let deltas: [Delta]
         public let trailingFragment: Data
     }
 
@@ -231,6 +255,7 @@ public final class JSONLTailer: @unchecked Sendable {
     /// fragment that the caller should prepend on the next call.
     public static func scanLines(_ data: Data) -> ScanResult {
         var delta = ScanResult.Delta()
+        var deltas: [ScanResult.Delta] = []
         var lineStart = data.startIndex
         var cursor = data.startIndex
         let newline: UInt8 = 0x0A
@@ -239,7 +264,12 @@ public final class JSONLTailer: @unchecked Sendable {
             if data[cursor] == newline {
                 let line = data[lineStart..<cursor]
                 if !line.isEmpty {
-                    apply(line: line, into: &delta)
+                    var lineDelta = ScanResult.Delta()
+                    apply(line: line, into: &lineDelta)
+                    if !lineDelta.isEmpty {
+                        deltas.append(lineDelta)
+                        merge(lineDelta, into: &delta)
+                    }
                 }
                 lineStart = data.index(after: cursor)
             }
@@ -247,7 +277,13 @@ public final class JSONLTailer: @unchecked Sendable {
         }
 
         let fragment = Data(data[lineStart..<data.endIndex])
-        return ScanResult(delta: delta, trailingFragment: fragment)
+        return ScanResult(delta: delta, deltas: deltas, trailingFragment: fragment)
+    }
+
+    private static func merge(_ source: ScanResult.Delta, into destination: inout ScanResult.Delta) {
+        if let prompt = source.lastUserPrompt { destination.lastUserPrompt = prompt }
+        if let reply = source.lastAssistantMessage { destination.lastAssistantMessage = reply }
+        if let lifecycle = source.codexLifecycle { destination.codexLifecycle = lifecycle }
     }
 
     private static func apply(line: Data.SubSequence, into delta: inout ScanResult.Delta) {
@@ -285,6 +321,29 @@ public final class JSONLTailer: @unchecked Sendable {
                     delta.lastAssistantMessage = trimmed
                 }
             }
+        case "event_msg":
+            guard let payload = json["payload"] as? [String: Any],
+                  let eventType = payload["type"] as? String else { return }
+            switch eventType {
+            case "task_started":
+                delta.codexLifecycle = .taskStarted
+            case "user_message":
+                delta.codexLifecycle = .userMessage
+                if let text = extractText(from: payload["message"]) {
+                    delta.lastUserPrompt = text
+                }
+            case "agent_reasoning":
+                delta.codexLifecycle = .agentWorking
+            case "agent_message":
+                delta.codexLifecycle = .agentWorking
+                if let text = extractText(from: payload["message"]) {
+                    delta.lastAssistantMessage = text
+                }
+            case "task_complete":
+                delta.codexLifecycle = .taskCompleted
+            default:
+                break
+            }
         default:
             break
         }
@@ -296,6 +355,7 @@ public final class JSONLTailer: @unchecked Sendable {
     enum QuickTypeKind: Equatable {
         case user
         case assistant
+        case eventMessage
         case irrelevant
     }
 
@@ -348,6 +408,10 @@ public final class JSONLTailer: @unchecked Sendable {
                             if hasExactValue(ptr, at: valueStart, total: total, expect: plannerResponseBytes) {
                                 return .assistant
                             }
+                        case 0x65:  // 'e'
+                            if hasExactValue(ptr, at: valueStart, total: total, expect: eventMessageBytes) {
+                                return .eventMessage
+                            }
                         default:
                             break
                         }
@@ -370,6 +434,7 @@ public final class JSONLTailer: @unchecked Sendable {
     private static let assistantBytes: [UInt8] = Array(#"assistant""#.utf8)
     private static let userInputBytes: [UInt8] = Array(#"USER_INPUT""#.utf8)
     private static let plannerResponseBytes: [UInt8] = Array(#"PLANNER_RESPONSE""#.utf8)
+    private static let eventMessageBytes: [UInt8] = Array(#"event_msg""#.utf8)
 
     private static func hasExactValue(
         _ ptr: UnsafePointer<UInt8>,

@@ -807,7 +807,7 @@ final class AppState {
         return .expand
     }
 
-    private func enqueueCompletion(_ sessionId: String) {
+    func enqueueCompletion(_ sessionId: String) {
         switch Self.completionStyle() {
         case .off:
             // Panel stays compact — status indicators still update, but no
