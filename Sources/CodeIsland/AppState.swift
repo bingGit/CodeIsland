@@ -318,11 +318,15 @@ final class AppState {
         for (key, session) in sessions where session.status == .idle {
             let idleMinutes = Int(-session.lastActivity.timeIntervalSinceNow / 60)
             let hasMonitor = processMonitors[key] != nil
-            if userTimeout > 0 && idleMinutes >= userTimeout {
-                // User-configured timeout applies to all sessions
-                removeSession(key)
-            } else if !hasMonitor && idleMinutes >= defaultStaleMinutes {
-                // No process monitor (hook-only sessions): clean up after 10 min idle
+            let nativeAppIsRunning = session.isNativeAppMode
+                && session.termBundleId.map(runningBundleIds.contains) == true
+            if Self.shouldRemoveIdleSession(
+                idleMinutes: idleMinutes,
+                userTimeout: userTimeout,
+                hasMonitor: hasMonitor,
+                nativeAppIsRunning: nativeAppIsRunning,
+                defaultStaleMinutes: defaultStaleMinutes
+            ) {
                 removeSession(key)
             }
         }
@@ -331,6 +335,25 @@ final class AppState {
         prunePendingToolUses()
 
         refreshDerivedState()
+    }
+
+    nonisolated static func shouldRemoveIdleSession(
+        idleMinutes: Int,
+        userTimeout: Int,
+        hasMonitor: Bool,
+        nativeAppIsRunning: Bool,
+        defaultStaleMinutes: Int = 10
+    ) -> Bool {
+        // Explicit user settings apply consistently to every session type.
+        if userTimeout > 0 {
+            return idleMinutes >= userTimeout
+        }
+        // Native desktop sessions have no task-specific PID monitor. Their app
+        // lifecycle is checked separately, so do not treat them as hook-only.
+        if nativeAppIsRunning {
+            return false
+        }
+        return !hasMonitor && idleMinutes >= defaultStaleMinutes
     }
 
     private nonisolated static func currentPluginSessionMode() -> String {
