@@ -641,7 +641,7 @@ final class AppState {
         }
     }
 
-    private func startRotationIfNeeded() {
+    func startRotationIfNeeded() {
         refreshActiveIds()
         if cachedActiveIds.count > 1 {
             // If the most urgent session changed, snap to it immediately
@@ -2153,7 +2153,7 @@ final class AppState {
     // MARK: - Session Discovery (FSEventStream + process scan)
     // MARK: - Session Persistence
 
-    private func scheduleSave() {
+    func scheduleSave() {
         saveTimer?.invalidate()
         saveTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: false) { [weak self] _ in
             Task { @MainActor in
