@@ -60,6 +60,55 @@ final class AppStateCompletionValidityTests: XCTestCase {
         }
     }
 
+    func testCodexExternalActionWaitOpensAndRemainsDuringPollingUntilAgentResumes() {
+        let defaults = UserDefaults.standard
+        let previousSmartSuppress = defaults.object(forKey: SettingsKey.smartSuppress)
+        let previousSoundEnabled = defaults.object(forKey: SettingsKey.soundEnabled)
+        defaults.set(false, forKey: SettingsKey.smartSuppress)
+        defaults.set(false, forKey: SettingsKey.soundEnabled)
+        defer {
+            restore(previousSmartSuppress, forKey: SettingsKey.smartSuppress, in: defaults)
+            restore(previousSoundEnabled, forKey: SettingsKey.soundEnabled, in: defaults)
+        }
+
+        let appState = AppState()
+        var session = SessionSnapshot()
+        session.source = "codex"
+        session.status = .running
+        appState.sessions["codex"] = session
+
+        appState.applyTranscriptDelta(ConversationTailDelta(
+            sessionId: "codex",
+            lastUserPrompt: nil,
+            lastAssistantMessage: "请打开 GitHub 设备授权页面，完成后我会继续。",
+            codexLifecycle: .waitingForUser
+        ))
+
+        XCTAssertEqual(appState.sessions["codex"]?.status, .waitingQuestion)
+        XCTAssertEqual(appState.surface, .sessionList)
+        XCTAssertEqual(appState.activeSessionId, "codex")
+
+        appState.applyTranscriptDelta(ConversationTailDelta(
+            sessionId: "codex",
+            lastUserPrompt: nil,
+            lastAssistantMessage: nil,
+            codexLifecycle: .agentWorking
+        ))
+
+        XCTAssertEqual(appState.sessions["codex"]?.status, .waitingQuestion)
+        XCTAssertEqual(appState.surface, .sessionList)
+
+        appState.applyTranscriptDelta(ConversationTailDelta(
+            sessionId: "codex",
+            lastUserPrompt: nil,
+            lastAssistantMessage: "授权已完成，我现在继续查询。",
+            codexLifecycle: .agentMessage
+        ))
+
+        XCTAssertEqual(appState.sessions["codex"]?.status, .running)
+        XCTAssertEqual(appState.surface, .collapsed)
+    }
+
     func testLastIdleCompletionStaysVisibleWhenInactiveIslandWouldHide() {
         let defaults = UserDefaults.standard
         let previousHideWhenNoSession = defaults.object(forKey: SettingsKey.hideWhenNoSession)

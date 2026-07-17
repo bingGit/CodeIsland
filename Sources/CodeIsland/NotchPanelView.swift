@@ -710,6 +710,14 @@ private struct CompactToolStatus: View {
             } else if displayStatus == .processing {
                 TypingIndicator(fontSize: 11, label: "thinking", bright: true)
                     .id("thinking-\(appState.rotatingSessionId ?? "")")
+            } else if displayStatus == .waitingApproval || displayStatus == .waitingQuestion {
+                TypingIndicator(
+                    fontSize: 11,
+                    label: L10n.shared["status_waiting"],
+                    bright: true,
+                    color: Color(red: 1.0, green: 0.7, blue: 0.28)
+                )
+                .id("waiting-\(appState.rotatingSessionId ?? "")")
             }
         }
         .font(.system(size: 11, weight: .medium, design: .monospaced))
@@ -2386,6 +2394,13 @@ private struct SessionCard: View {
                                     color: .white.opacity(0.75)
                                 )
                                 .truncationMode(.tail)
+                            } else if session.status == .waitingApproval || session.status == .waitingQuestion {
+                                TypingIndicator(
+                                    fontSize: fontSize,
+                                    label: L10n.shared["status_waiting"],
+                                    bright: true,
+                                    color: Color(red: 1.0, green: 0.7, blue: 0.28)
+                                )
                             } else {
                                 TypingIndicator(fontSize: fontSize, label: "thinking")
                             }

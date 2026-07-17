@@ -122,9 +122,45 @@ final class JSONLTailerTests: XCTestCase {
             .taskStarted,
             .userMessage,
             .agentWorking,
-            .agentWorking,
+            .agentMessage,
             .taskCompleted,
         ])
+    }
+
+    func testScanLinesRecognizesCodexExternalUserActionWait() {
+        let line = codexEventLine(
+            type: "agent_message",
+            message: "设备码是 8B60-631B。请打开 GitHub 设备授权页面，输入设备码并确认授权。完成后我会继续。",
+            phase: "commentary"
+        ) + "\n"
+
+        let result = JSONLTailer.scanLines(Data(line.utf8))
+
+        XCTAssertEqual(result.delta.codexLifecycle, .waitingForUser)
+    }
+
+    func testScanLinesDoesNotTreatOrdinaryCodexProgressAsUserWait() {
+        let line = codexEventLine(
+            type: "agent_message",
+            message: "构建仍在运行，请稍等，我会继续检查结果。",
+            phase: "commentary"
+        ) + "\n"
+
+        let result = JSONLTailer.scanLines(Data(line.utf8))
+
+        XCTAssertEqual(result.delta.codexLifecycle, .agentMessage)
+    }
+
+    func testScanLinesRequiresCommentaryPhaseForExternalUserActionWait() {
+        let line = codexEventLine(
+            type: "agent_message",
+            message: "请打开浏览器完成授权，完成后告诉我。",
+            phase: "final_answer"
+        ) + "\n"
+
+        let result = JSONLTailer.scanLines(Data(line.utf8))
+
+        XCTAssertEqual(result.delta.codexLifecycle, .agentMessage)
     }
 
     func testScanLinesMarksCodexReasoningAsWorking() {
@@ -260,9 +296,10 @@ final class JSONLTailerTests: XCTestCase {
         return jsonString(payload)
     }
 
-    private func codexEventLine(type: String, message: String? = nil) -> String {
+    private func codexEventLine(type: String, message: String? = nil, phase: String? = nil) -> String {
         var event: [String: Any] = ["type": type]
         if let message { event["message"] = message }
+        if let phase { event["phase"] = phase }
         return jsonString(["type": "event_msg", "payload": event])
     }
 

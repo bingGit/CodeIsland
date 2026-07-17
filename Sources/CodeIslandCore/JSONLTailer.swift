@@ -8,6 +8,8 @@ public enum CodexTranscriptLifecycle: Equatable, Sendable {
     case taskStarted
     case userMessage
     case agentWorking
+    case agentMessage
+    case waitingForUser
     case taskCompleted
 }
 
@@ -335,9 +337,18 @@ public final class JSONLTailer: @unchecked Sendable {
             case "agent_reasoning":
                 delta.codexLifecycle = .agentWorking
             case "agent_message":
-                delta.codexLifecycle = .agentWorking
                 if let text = extractText(from: payload["message"]) {
                     delta.lastAssistantMessage = text
+                    if indicatesExternalUserAction(
+                        message: text,
+                        phase: payload["phase"] as? String
+                    ) {
+                        delta.codexLifecycle = .waitingForUser
+                    } else {
+                        delta.codexLifecycle = .agentMessage
+                    }
+                } else {
+                    delta.codexLifecycle = .agentMessage
                 }
             case "task_complete":
                 delta.codexLifecycle = .taskCompleted
@@ -347,6 +358,36 @@ public final class JSONLTailer: @unchecked Sendable {
         default:
             break
         }
+    }
+
+    /// Codex has no dedicated lifecycle event for external browser/device flows.
+    /// Recognize only commentary that both directs the user to act and says the
+    /// task is waiting or will continue afterwards. Keeping the predicate narrow
+    /// avoids treating ordinary progress narration as an actionable wait.
+    static func indicatesExternalUserAction(message: String, phase: String?) -> Bool {
+        guard phase == "commentary" else { return false }
+        let text = message.lowercased()
+
+        let directActionSignals = [
+            "请打开", "请前往", "请访问", "请在", "请输入", "请完成", "请确认", "请授权", "请登录",
+            "需要你", "需要您", "你需要", "您需要", "麻烦你", "麻烦您",
+            "please open", "please visit", "please enter", "please complete", "please confirm",
+            "please approve", "please authorize", "please sign in", "you need to",
+        ]
+        let continuationSignals = [
+            "等待", "等你", "完成后", "操作后", "确认后", "授权后", "登录后", "告诉我",
+            "wait", "waiting", "once you", "after you", "when you", "let me know", "then i will",
+        ]
+        let externalFlowSignals = [
+            "设备码", "验证码", "授权页面", "浏览器", "网页", "github.com/login/device",
+            "device code", "verification code", "authorization page", "browser", "web page",
+            "captcha", "oauth", "2fa",
+        ]
+
+        let directsUser = directActionSignals.contains { text.contains($0) }
+        let waitsForContinuation = continuationSignals.contains { text.contains($0) }
+        let namesExternalFlow = externalFlowSignals.contains { text.contains($0) }
+        return waitsForContinuation && (directsUser || namesExternalFlow)
     }
 
     /// Types we care about for the panel: `"user"` and `"assistant"`. Anything

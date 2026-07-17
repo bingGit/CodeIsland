@@ -87,6 +87,13 @@ final class AppState {
     /// reattach when the path actually changes. See AppState+TranscriptTailer.
     @ObservationIgnored
     var attachedTranscriptPaths: [String: String] = [:]
+    /// Codex commentary can ask the user to finish an external browser/device
+    /// flow without emitting request_user_input. Track that transient wait so
+    /// reasoning/polling rows do not immediately overwrite the alert state.
+    @ObservationIgnored
+    var codexExternalActionSessionIds: Set<String> = []
+    @ObservationIgnored
+    var codexExternalActionAutoOpened = false
     @ObservationIgnored
     private var manuallyDismissedSessionActivity = SessionPersistence.loadDismissedSessions()
     /// Watches active session transcripts for appended assistant lines. Lazily
@@ -614,6 +621,10 @@ final class AppState {
             }
         }
         sessions.removeValue(forKey: sessionId)
+        codexExternalActionSessionIds.remove(sessionId)
+        if codexExternalActionSessionIds.isEmpty {
+            codexExternalActionAutoOpened = false
+        }
         stopMonitor(sessionId)
         detachTranscriptTailer(sessionId: sessionId)
         exitingSessions.removeValue(forKey: sessionId)

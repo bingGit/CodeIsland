@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import CodeIslandCore
 
 extension AppState {
@@ -39,6 +40,8 @@ extension AppState {
         var mutated = false
         var shouldEnqueueCompletion = false
         var shouldInvalidateCompletion = false
+        var shouldPresentExternalAction = false
+        var shouldEndExternalAction = false
 
         if let prompt = delta.lastUserPrompt, session.lastUserPrompt != prompt {
             session.lastUserPrompt = prompt
@@ -62,6 +65,7 @@ extension AppState {
         if session.source == "codex", let lifecycle = delta.codexLifecycle {
             switch lifecycle {
             case .taskStarted, .userMessage:
+                shouldEndExternalAction = codexExternalActionSessionIds.contains(delta.sessionId)
                 shouldInvalidateCompletion = true
                 session.interrupted = false
                 session.status = .processing
@@ -74,7 +78,33 @@ extension AppState {
                     session.currentTool = nil
                     session.toolDescription = nil
                 }
+            case .agentMessage:
+                shouldInvalidateCompletion = true
+                shouldEndExternalAction = codexExternalActionSessionIds.contains(delta.sessionId)
+                if shouldEndExternalAction {
+                    let hasQueuedInteraction = permissionQueue.contains {
+                        ($0.event.sessionId ?? "default") == delta.sessionId
+                    } || questionQueue.contains {
+                        ($0.event.sessionId ?? "default") == delta.sessionId
+                    }
+                    if !hasQueuedInteraction {
+                        session.status = .running
+                        session.currentTool = nil
+                        session.toolDescription = nil
+                    }
+                } else if session.status != .waitingApproval && session.status != .waitingQuestion {
+                    session.status = .running
+                    session.currentTool = nil
+                    session.toolDescription = nil
+                }
+            case .waitingForUser:
+                shouldInvalidateCompletion = true
+                shouldPresentExternalAction = codexExternalActionSessionIds.insert(delta.sessionId).inserted
+                session.status = .waitingQuestion
+                session.currentTool = nil
+                session.toolDescription = nil
             case .taskCompleted:
+                shouldEndExternalAction = codexExternalActionSessionIds.contains(delta.sessionId)
                 session.status = .idle
                 session.currentTool = nil
                 session.toolDescription = nil
@@ -93,8 +123,14 @@ extension AppState {
             }
             sessions[delta.sessionId] = session
         }
+        if shouldEndExternalAction {
+            endCodexExternalActionWait(sessionId: delta.sessionId)
+        }
         if shouldInvalidateCompletion {
             invalidateCompletion(for: delta.sessionId)
+        }
+        if shouldPresentExternalAction {
+            presentCodexExternalActionWait(sessionId: delta.sessionId)
         }
         if shouldEnqueueCompletion {
             enqueueCompletion(delta.sessionId)
@@ -103,6 +139,29 @@ extension AppState {
             scheduleSave()
             startRotationIfNeeded()
             refreshDerivedState()
+        }
+    }
+
+    private func presentCodexExternalActionWait(sessionId: String) {
+        activeSessionId = sessionId
+        if surface == .collapsed, shouldAutoOpenPendingSurface(for: sessionId) {
+            withAnimation(NotchAnimation.open) {
+                surface = .sessionList
+            }
+            codexExternalActionAutoOpened = true
+        }
+        SoundManager.shared.handleEvent("PermissionRequest")
+    }
+
+    private func endCodexExternalActionWait(sessionId: String) {
+        codexExternalActionSessionIds.remove(sessionId)
+        guard codexExternalActionSessionIds.isEmpty else { return }
+        guard codexExternalActionAutoOpened else { return }
+        codexExternalActionAutoOpened = false
+        if surface == .sessionList {
+            withAnimation(NotchAnimation.close) {
+                surface = .collapsed
+            }
         }
     }
 }

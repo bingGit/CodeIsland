@@ -369,6 +369,9 @@ extension AppState {
         guard var snapshot = sessions[sessionId] else { return }
 
         applyCodexThreadStatus(&snapshot, status: params["status"]?.asObject)
+        if codexExternalActionSessionIds.contains(sessionId), snapshot.status == .running {
+            snapshot.status = .waitingQuestion
+        }
         snapshot.lastActivity = Date()
         sessions[sessionId] = snapshot
         if snapshot.status != .idle {
