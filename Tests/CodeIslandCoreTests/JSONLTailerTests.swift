@@ -127,7 +127,7 @@ final class JSONLTailerTests: XCTestCase {
         ])
     }
 
-    func testScanLinesRecognizesCodexExternalUserActionWait() {
+    func testScanLinesRecognizesCodexRequiredUserActionWait() {
         let line = codexEventLine(
             type: "agent_message",
             message: "设备码是 8B60-631B。请打开 GitHub 设备授权页面，输入设备码并确认授权。完成后我会继续。",
@@ -151,7 +151,55 @@ final class JSONLTailerTests: XCTestCase {
         XCTAssertEqual(result.delta.codexLifecycle, .agentMessage)
     }
 
-    func testScanLinesRequiresCommentaryPhaseForExternalUserActionWait() {
+    func testScanLinesRecognizesTerminalActionWithoutAuthenticationWords() {
+        let line = codexEventLine(
+            type: "agent_message",
+            message: "请在终端按下回车，完成后我才能继续。",
+            phase: "commentary"
+        ) + "\n"
+
+        let result = JSONLTailer.scanLines(Data(line.utf8))
+
+        XCTAssertEqual(result.delta.codexLifecycle, .waitingForUser)
+    }
+
+    func testScanLinesRecognizesRequiredSelectionWithoutContinuationPhrase() {
+        let line = codexEventLine(
+            type: "agent_message",
+            message: "请选择要发布的版本。",
+            phase: "commentary"
+        ) + "\n"
+
+        let result = JSONLTailer.scanLines(Data(line.utf8))
+
+        XCTAssertEqual(result.delta.codexLifecycle, .waitingForUser)
+    }
+
+    func testScanLinesDoesNotTreatAutonomousBrowserProgressAsUserWait() {
+        let line = codexEventLine(
+            type: "agent_message",
+            message: "浏览器测试完成后我会继续检查截图，请稍等。",
+            phase: "commentary"
+        ) + "\n"
+
+        let result = JSONLTailer.scanLines(Data(line.utf8))
+
+        XCTAssertEqual(result.delta.codexLifecycle, .agentMessage)
+    }
+
+    func testScanLinesHonorsExplicitNoActionNeededMessage() {
+        let line = codexEventLine(
+            type: "agent_message",
+            message: "不需要你操作，我会等待构建完成。",
+            phase: "commentary"
+        ) + "\n"
+
+        let result = JSONLTailer.scanLines(Data(line.utf8))
+
+        XCTAssertEqual(result.delta.codexLifecycle, .agentMessage)
+    }
+
+    func testScanLinesRequiresCommentaryPhaseForRequiredUserActionWait() {
         let line = codexEventLine(
             type: "agent_message",
             message: "请打开浏览器完成授权，完成后告诉我。",

@@ -60,7 +60,7 @@ final class AppStateCompletionValidityTests: XCTestCase {
         }
     }
 
-    func testCodexExternalActionWaitOpensAndRemainsDuringPollingUntilAgentResumes() {
+    func testCodexUserActionWaitOpensAndRemainsDuringPollingUntilAgentResumes() {
         let defaults = UserDefaults.standard
         let previousSmartSuppress = defaults.object(forKey: SettingsKey.smartSuppress)
         let previousSoundEnabled = defaults.object(forKey: SettingsKey.soundEnabled)

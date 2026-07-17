@@ -40,8 +40,8 @@ extension AppState {
         var mutated = false
         var shouldEnqueueCompletion = false
         var shouldInvalidateCompletion = false
-        var shouldPresentExternalAction = false
-        var shouldEndExternalAction = false
+        var shouldPresentUserActionWait = false
+        var shouldEndUserActionWait = false
 
         if let prompt = delta.lastUserPrompt, session.lastUserPrompt != prompt {
             session.lastUserPrompt = prompt
@@ -65,7 +65,7 @@ extension AppState {
         if session.source == "codex", let lifecycle = delta.codexLifecycle {
             switch lifecycle {
             case .taskStarted, .userMessage:
-                shouldEndExternalAction = codexExternalActionSessionIds.contains(delta.sessionId)
+                shouldEndUserActionWait = codexUserActionWaitSessionIds.contains(delta.sessionId)
                 shouldInvalidateCompletion = true
                 session.interrupted = false
                 session.status = .processing
@@ -80,8 +80,8 @@ extension AppState {
                 }
             case .agentMessage:
                 shouldInvalidateCompletion = true
-                shouldEndExternalAction = codexExternalActionSessionIds.contains(delta.sessionId)
-                if shouldEndExternalAction {
+                shouldEndUserActionWait = codexUserActionWaitSessionIds.contains(delta.sessionId)
+                if shouldEndUserActionWait {
                     let hasQueuedInteraction = permissionQueue.contains {
                         ($0.event.sessionId ?? "default") == delta.sessionId
                     } || questionQueue.contains {
@@ -99,12 +99,12 @@ extension AppState {
                 }
             case .waitingForUser:
                 shouldInvalidateCompletion = true
-                shouldPresentExternalAction = codexExternalActionSessionIds.insert(delta.sessionId).inserted
+                shouldPresentUserActionWait = codexUserActionWaitSessionIds.insert(delta.sessionId).inserted
                 session.status = .waitingQuestion
                 session.currentTool = nil
                 session.toolDescription = nil
             case .taskCompleted:
-                shouldEndExternalAction = codexExternalActionSessionIds.contains(delta.sessionId)
+                shouldEndUserActionWait = codexUserActionWaitSessionIds.contains(delta.sessionId)
                 session.status = .idle
                 session.currentTool = nil
                 session.toolDescription = nil
@@ -123,14 +123,14 @@ extension AppState {
             }
             sessions[delta.sessionId] = session
         }
-        if shouldEndExternalAction {
-            endCodexExternalActionWait(sessionId: delta.sessionId)
+        if shouldEndUserActionWait {
+            endCodexUserActionWait(sessionId: delta.sessionId)
         }
         if shouldInvalidateCompletion {
             invalidateCompletion(for: delta.sessionId)
         }
-        if shouldPresentExternalAction {
-            presentCodexExternalActionWait(sessionId: delta.sessionId)
+        if shouldPresentUserActionWait {
+            presentCodexUserActionWait(sessionId: delta.sessionId)
         }
         if shouldEnqueueCompletion {
             enqueueCompletion(delta.sessionId)
@@ -142,22 +142,22 @@ extension AppState {
         }
     }
 
-    private func presentCodexExternalActionWait(sessionId: String) {
+    private func presentCodexUserActionWait(sessionId: String) {
         activeSessionId = sessionId
         if surface == .collapsed, shouldAutoOpenPendingSurface(for: sessionId) {
             withAnimation(NotchAnimation.open) {
                 surface = .sessionList
             }
-            codexExternalActionAutoOpened = true
+            codexUserActionWaitAutoOpened = true
         }
         SoundManager.shared.handleEvent("PermissionRequest")
     }
 
-    private func endCodexExternalActionWait(sessionId: String) {
-        codexExternalActionSessionIds.remove(sessionId)
-        guard codexExternalActionSessionIds.isEmpty else { return }
-        guard codexExternalActionAutoOpened else { return }
-        codexExternalActionAutoOpened = false
+    private func endCodexUserActionWait(sessionId: String) {
+        codexUserActionWaitSessionIds.remove(sessionId)
+        guard codexUserActionWaitSessionIds.isEmpty else { return }
+        guard codexUserActionWaitAutoOpened else { return }
+        codexUserActionWaitAutoOpened = false
         if surface == .sessionList {
             withAnimation(NotchAnimation.close) {
                 surface = .collapsed

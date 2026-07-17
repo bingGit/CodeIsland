@@ -339,7 +339,7 @@ public final class JSONLTailer: @unchecked Sendable {
             case "agent_message":
                 if let text = extractText(from: payload["message"]) {
                     delta.lastAssistantMessage = text
-                    if indicatesExternalUserAction(
+                    if indicatesRequiredUserAction(
                         message: text,
                         phase: payload["phase"] as? String
                     ) {
@@ -360,34 +360,61 @@ public final class JSONLTailer: @unchecked Sendable {
         }
     }
 
-    /// Codex has no dedicated lifecycle event for external browser/device flows.
-    /// Recognize only commentary that both directs the user to act and says the
-    /// task is waiting or will continue afterwards. Keeping the predicate narrow
-    /// avoids treating ordinary progress narration as an actionable wait.
-    static func indicatesExternalUserAction(message: String, phase: String?) -> Bool {
+    /// Codex has no dedicated lifecycle event for every user-action barrier.
+    /// Recognize commentary that explicitly requires an action, strongly asks for
+    /// input/confirmation, or names a blocked authentication flow. Keeping the
+    /// predicate narrow avoids treating ordinary progress narration as a wait.
+    static func indicatesRequiredUserAction(message: String, phase: String?) -> Bool {
         guard phase == "commentary" else { return false }
         let text = message.lowercased()
 
-        let directActionSignals = [
-            "请打开", "请前往", "请访问", "请在", "请输入", "请完成", "请确认", "请授权", "请登录",
-            "需要你", "需要您", "你需要", "您需要", "麻烦你", "麻烦您",
-            "please open", "please visit", "please enter", "please complete", "please confirm",
-            "please approve", "please authorize", "please sign in", "you need to",
-        ]
-        let continuationSignals = [
-            "等待", "等你", "完成后", "操作后", "确认后", "授权后", "登录后", "告诉我",
-            "wait", "waiting", "once you", "after you", "when you", "let me know", "then i will",
-        ]
-        let externalFlowSignals = [
-            "设备码", "验证码", "授权页面", "浏览器", "网页", "github.com/login/device",
-            "device code", "verification code", "authorization page", "browser", "web page",
-            "captcha", "oauth", "2fa",
+        let negatedRequirementSignals = [
+            "不需要你", "不需要您", "无需你", "无需您", "不用你", "不用您",
+            "no action needed", "no action is required", "you do not need to", "you don't need to",
+            "does not require your", "doesn't require your",
         ]
 
+        let explicitRequirementSignals = [
+            "需要你", "需要您", "你需要", "您需要", "等待你", "等你操作", "轮到你",
+            "需要用户操作", "需要用户输入", "需要人工操作", "需要人工确认",
+            "need you to", "waiting for you", "requires your action", "requires your input",
+            "user action required", "your confirmation is required",
+        ]
+        let strongDirectActionSignals = [
+            "请输入", "请选择", "请确认", "请回复", "请告诉", "请提供", "请粘贴", "请上传",
+            "请授权", "请登录", "请扫码", "请扫描", "请允许", "请同意",
+            "please enter", "please select", "please choose", "please confirm", "please reply",
+            "please provide", "please paste", "please upload", "please authorize", "please sign in",
+            "please scan", "please allow", "please approve",
+        ]
+        let directActionSignals = [
+            "请打开", "请前往", "请访问", "请在", "请完成", "请点击", "请按", "请切换",
+            "请连接", "请关闭", "请开启", "请处理", "麻烦你", "麻烦您",
+            "please open", "please visit", "please complete", "please click", "please press",
+            "please switch", "please connect", "please close", "please enable",
+        ]
+        let blockingSignals = [
+            "等待", "等你", "完成后", "操作后", "确认后", "授权后", "登录后", "选择后", "输入后",
+            "点击后", "回复后", "才能继续", "再继续", "继续前", "告诉我", "回复我", "卡在", "阻塞",
+            "wait", "waiting", "once you", "after you", "when you", "let me know",
+            "before i can continue", "before continuing", "to continue", "blocked until",
+        ]
+        let blockedAuthenticationSignals = [
+            "设备码", "验证码", "授权页面", "等待授权", "等待登录", "github.com/login/device",
+            "device code", "verification code", "authorization page", "waiting for authorization",
+            "waiting for sign-in", "captcha", "oauth", "2fa",
+        ]
+
+        let explicitlyNegated = negatedRequirementSignals.contains { text.contains($0) }
+        let explicitlyRequired = explicitRequirementSignals.contains { text.contains($0) }
+        let stronglyDirected = strongDirectActionSignals.contains { text.contains($0) }
         let directsUser = directActionSignals.contains { text.contains($0) }
-        let waitsForContinuation = continuationSignals.contains { text.contains($0) }
-        let namesExternalFlow = externalFlowSignals.contains { text.contains($0) }
-        return waitsForContinuation && (directsUser || namesExternalFlow)
+        let blocksContinuation = blockingSignals.contains { text.contains($0) }
+        let blockedOnAuthentication = blockedAuthenticationSignals.contains { text.contains($0) }
+        return (!explicitlyNegated && explicitlyRequired)
+            || stronglyDirected
+            || (directsUser && blocksContinuation)
+            || (blockedOnAuthentication && blocksContinuation)
     }
 
     /// Types we care about for the panel: `"user"` and `"assistant"`. Anything
