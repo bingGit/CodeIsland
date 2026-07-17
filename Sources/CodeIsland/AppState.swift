@@ -1040,6 +1040,14 @@ final class AppState {
         }
     }
 
+    nonisolated static func shouldHideInactivePanel(
+        hideWhenNoSession: Bool,
+        activeSessionCount: Int,
+        surface: IslandSurface
+    ) -> Bool {
+        hideWhenNoSession && activeSessionCount == 0 && !surface.isExpanded
+    }
+
     private func doShowCompletion(_ sessionId: String) {
         guard canPresentCompletion(for: sessionId) else { return }
         activeSessionId = sessionId

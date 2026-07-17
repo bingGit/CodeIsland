@@ -84,6 +84,19 @@ final class AppStateCompletionValidityTests: XCTestCase {
         XCTAssertFalse(appState.shouldKeepLastCompletionVisible(for: "completed"))
     }
 
+    func testExpandedCompletionPreventsInactivePanelFromHiding() {
+        XCTAssertFalse(AppState.shouldHideInactivePanel(
+            hideWhenNoSession: true,
+            activeSessionCount: 0,
+            surface: .completionCard(sessionId: "completed")
+        ))
+        XCTAssertTrue(AppState.shouldHideInactivePanel(
+            hideWhenNoSession: true,
+            activeSessionCount: 0,
+            surface: .collapsed
+        ))
+    }
+
     func testQueuedCodexCompletionIsSkippedAfterSessionBecomesActive() {
         withExpandedCompletions {
             let appState = AppState()

@@ -567,7 +567,11 @@ class PanelWindowController: NSObject, NSWindowDelegate {
             return
         }
 
-        if settings.hideWhenNoSession && appState.activeSessionCount == 0 {
+        if AppState.shouldHideInactivePanel(
+            hideWhenNoSession: settings.hideWhenNoSession,
+            activeSessionCount: appState.activeSessionCount,
+            surface: appState.surface
+        ) {
             panel.orderOut(nil)
             MascotAnimationGate.shared.setPanelVisible(false)
             return

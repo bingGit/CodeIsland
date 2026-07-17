@@ -117,7 +117,11 @@ struct NotchPanelView: View {
     }
     /// Whether the bar content should be visible (respects hideWhenNoSession)
     private var showBar: Bool {
-        isActive && !(hideWhenNoSession && appState.activeSessionCount == 0)
+        isActive && !AppState.shouldHideInactivePanel(
+            hideWhenNoSession: hideWhenNoSession,
+            activeSessionCount: appState.activeSessionCount,
+            surface: appState.surface
+        )
     }
     private var shouldShowExpanded: Bool {
         showBar && appState.surface.isExpanded
