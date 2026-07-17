@@ -43,6 +43,46 @@ final class AppStateCodexTranscriptTests: XCTestCase {
         )
     }
 
+    func testCodexVSCodeThreadResumedInDesktopUsesCodexBundle() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codeisland-codex-desktop-resume-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let transcript = directory.appendingPathComponent("rollout.jsonl")
+        let lines = [
+            #"{"type":"session_meta","payload":{"originator":"codex_vscode","cwd":"/repo"}}"#,
+            #"{"type":"turn_context","payload":{"workspace_roots":["/repo","/Users/test/.codex/visualizations/2026/07/17/thread-id"]}}"#,
+        ]
+        try (lines.joined(separator: "\n") + "\n").write(
+            to: transcript,
+            atomically: true,
+            encoding: .utf8
+        )
+
+        XCTAssertEqual(
+            AppState.codexHostedTranscriptMetadata(
+                path: transcript.path,
+                vscodeHostBundleId: "com.todesktop.230313mzl4w4u92"
+            ),
+            CodexHostedTranscriptMetadata(
+                cwd: "/repo",
+                termBundleId: AppState.codexAppBundleId
+            )
+        )
+    }
+
+    func testCodexVSCodeThreadUsesLatestTurnContextHost() {
+        let transcriptTail = [
+            #"{"type":"turn_context","payload":{"workspace_roots":["/repo","/Users/test/.codex/visualizations/2026/07/17/thread-id"]}}"#,
+            #"{"type":"event_msg","payload":{"type":"task_complete"}}"#,
+            #"{"type":"turn_context","payload":{"workspace_roots":["/repo"]}}"#,
+        ].joined(separator: "\n")
+
+        XCTAssertEqual(AppState.codexLatestTurnContextRunsInDesktop(transcriptTail), false)
+        XCTAssertNil(AppState.codexLatestTurnContextRunsInDesktop("{\"type\":\"event_msg\"}"))
+    }
+
     func testCodexGuardianTranscriptIsNotDiscoveredAsUserSession() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("codeisland-codex-guardian-\(UUID().uuidString)")

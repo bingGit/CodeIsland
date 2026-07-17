@@ -4522,10 +4522,35 @@ final class AppState {
         case "Codex Desktop":
             return CodexHostedTranscriptMetadata(cwd: cwd, termBundleId: codexAppBundleId)
         case "codex_vscode":
-            return CodexHostedTranscriptMetadata(cwd: cwd, termBundleId: vscodeHostBundleId)
+            // `originator` records where the thread was first created, not where it
+            // is currently running. A thread created in Cursor can later be resumed
+            // in Codex Desktop without rewriting session_meta. The Desktop app adds
+            // its per-thread visualization directory to each turn's workspace roots,
+            // so the latest turn context is the authoritative host signal.
+            let isRunningInDesktop = readTranscriptTail(path: path, maxBytes: 262144)
+                .flatMap { codexLatestTurnContextRunsInDesktop($0) }
+                ?? false
+            return CodexHostedTranscriptMetadata(
+                cwd: cwd,
+                termBundleId: isRunningInDesktop ? codexAppBundleId : vscodeHostBundleId
+            )
         default:
             return nil
         }
+    }
+
+    nonisolated static func codexLatestTurnContextRunsInDesktop(_ transcriptTail: String) -> Bool? {
+        for line in transcriptTail.components(separatedBy: "\n").reversed() {
+            guard !line.isEmpty,
+                  let data = line.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  json["type"] as? String == "turn_context",
+                  let payload = json["payload"] as? [String: Any] else { continue }
+
+            let roots = payload["workspace_roots"] as? [String] ?? []
+            return roots.contains { $0.contains("/.codex/visualizations/") }
+        }
+        return nil
     }
 
     nonisolated static func isCodexInternalGuardianThread(
